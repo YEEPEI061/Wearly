@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/pages/signup_page.dart';
+import 'package:frontend/pages/login_page.dart';
+import 'package:frontend/pages/splash_page.dart';
 
-import 'pages/wardrobe_page.dart';
+// import 'pages/wardrobe_page.dart';
 
 void main() {
 
@@ -52,7 +55,7 @@ class WardrobeApp
       ),
 
       home:
-          const WardrobePage(),
+          const SplashPage(),
     );
   }
 }
