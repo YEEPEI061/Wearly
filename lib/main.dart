@@ -1,61 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/signup_page.dart';
-import 'package:frontend/pages/login_page.dart';
-import 'package:frontend/pages/splash_page.dart';
+import 'package:frontend/pages/wardrobe_page.dart';
 
 // import 'pages/wardrobe_page.dart';
 
 void main() {
-
-  runApp(
-    const WardrobeApp(),
-  );
+  runApp(const WardrobeApp());
 }
 
-
-class WardrobeApp
-    extends StatelessWidget {
-
-  const WardrobeApp({
-    super.key,
-  });
-
+class WardrobeApp extends StatelessWidget {
+  const WardrobeApp({super.key});
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-
+  Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
 
-      debugShowCheckedModeBanner:
-          false,
+      title: 'AI Wardrobe',
 
-      title:
-          'AI Wardrobe',
+      theme: ThemeData(
+        useMaterial3: true,
 
-      theme:
-          ThemeData(
+        scaffoldBackgroundColor: const Color(0xFFF8F7F4),
 
-        useMaterial3:
-            true,
-
-        scaffoldBackgroundColor:
-            const Color(
-          0xFFF8F7F4,
-        ),
-
-        colorScheme:
-            ColorScheme.fromSeed(
-          seedColor:
-              const Color(
-            0xFF6E6259,
-          ),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6E6259)),
       ),
 
-      home:
-          const SplashPage(),
+      home: const WardrobePage(),
     );
   }
 }
