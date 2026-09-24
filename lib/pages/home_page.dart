@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/pages/history_page.dart';
+import 'package:frontend/pages/profile_page.dart';
+import 'package:frontend/pages/stylist_page.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -8,6 +11,7 @@ import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_header.dart';
 import 'package:frontend/widgets/bottom_nav_bar.dart';
 import 'package:frontend/pages/wardrobe_page.dart';
+import 'package:frontend/pages/travel_outfit_planner_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -155,15 +159,24 @@ class _HomePageState extends State<HomePage> {
         break;
 
       case 2:
-        // Navigate to Stylist later
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const StylistPage()),
+        );
         break;
 
       case 3:
-        // Navigate to History later
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const HistoryPage()),
+        );
         break;
 
       case 4:
-        // Navigate to Profile later
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ProfilePage()),
+        );
         break;
     }
   }
@@ -206,6 +219,13 @@ class _HomePageState extends State<HomePage> {
     ).showSnackBar(const SnackBar(content: Text('Outfit selected for today.')));
   }
 
+  void _openTravelPlanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TravelOutfitPlannerPage()),
+    );
+  }
+
   void _swapItems() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -233,7 +253,7 @@ class _HomePageState extends State<HomePage> {
                 // CONTENT
                 // ========================================================
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 110),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 90),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       _buildGreeting(),
@@ -249,6 +269,10 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(height: 32),
 
                       _buildWeatherInsight(),
+
+                      const SizedBox(height: 16),
+
+                      _buildTravelCapsule(),
 
                       const SizedBox(height: 32),
 
@@ -740,6 +764,119 @@ class _HomePageState extends State<HomePage> {
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.onSurfaceVariant,
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // TRAVEL CAPSULE
+  // ============================================================
+
+  Widget _buildTravelCapsule() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --------------------------------------------------------
+          // TOP ROW
+          // --------------------------------------------------------
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                ),
+                child: Text(
+                  'TRAVEL CAPSULE',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: AppColors.primaryDim,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+
+              const Icon(
+                Icons.flight_takeoff,
+                size: 24,
+                color: AppColors.primaryDim,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // --------------------------------------------------------
+          // TITLE
+          // --------------------------------------------------------
+          Text(
+            'Plan Your Journey Wardrobe',
+            style: AppTextStyles.headlineMedium.copyWith(
+              color: AppColors.white,
+            ),
+          ),
+
+          const SizedBox(height: 4),
+
+          // --------------------------------------------------------
+          // DESCRIPTION
+          // --------------------------------------------------------
+          Text(
+            'Smart 7-day capsule packing & weather-synced rotation '
+            'tailored to your destination.',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.white.withOpacity(0.80),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // --------------------------------------------------------
+          // PLAN OUTFITS
+          // --------------------------------------------------------
+          GestureDetector(
+            onTap: _openTravelPlanner,
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'PLAN OUTFITS',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.secondaryDim,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+
+                const SizedBox(width: 6),
+
+                const Icon(
+                  Icons.arrow_forward,
+                  size: 16,
+                  color: AppColors.secondaryDim,
                 ),
               ],
             ),

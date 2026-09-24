@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/wardrobe_page.dart';
+import 'package:frontend/pages/travel_outfit_planner_page.dart';
+import 'package:frontend/pages/home_page.dart';
 
 // import 'pages/wardrobe_page.dart';
 
@@ -25,7 +26,7 @@ class WardrobeApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6E6259)),
       ),
 
-      home: const WardrobePage(),
+      home: const HomePage(),
     );
   }
 }

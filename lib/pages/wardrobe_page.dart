@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/pages/history_page.dart';
+import 'package:frontend/pages/profile_page.dart';
+import 'package:frontend/pages/stylist_page.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
@@ -108,15 +111,24 @@ class _WardrobePageState extends State<WardrobePage> {
         break;
 
       case 2:
-        // Navigate to Stylist later
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const StylistPage()),
+        );
         break;
 
       case 3:
-        // Navigate to History later
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const HistoryPage()),
+        );
         break;
 
       case 4:
-        // Navigate to Profile later
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ProfilePage()),
+        );
         break;
     }
   }
@@ -173,7 +185,7 @@ class _WardrobePageState extends State<WardrobePage> {
                 ),
 
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 90),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       _buildSearchBar(),
