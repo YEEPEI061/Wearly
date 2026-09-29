@@ -8,6 +8,7 @@ import 'package:frontend/pages/home_page.dart';
 import 'package:frontend/pages/wardrobe_page.dart';
 import 'package:frontend/pages/stylist_page.dart';
 import 'package:frontend/pages/history_page.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -23,6 +24,18 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool _dailyBriefingEnabled = true;
   bool _weatherEnabled = true;
+
+  Future<void> _changeProfileImage() async {
+    final ImagePicker picker = ImagePicker();
+
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      setState(() {
+        // Store the selected image here
+      });
+    }
+  }
 
   // ============================================================
   // BUILD
@@ -141,27 +154,32 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
 
-              // Verified badge
+              // Change profile image
               Positioned(
                 right: -4,
                 bottom: -4,
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: AppColors.secondaryDim,
-                    borderRadius: BorderRadius.circular(AppRadius.small),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.verified,
-                    size: 15,
-                    color: AppColors.primary,
+                child: GestureDetector(
+                  onTap: () {
+                    _changeProfileImage();
+                  },
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: AppColors.secondaryDim,
+                      borderRadius: BorderRadius.circular(AppRadius.small),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_outlined,
+                      size: 15,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
               ),
@@ -173,7 +191,7 @@ class _ProfilePageState extends State<ProfilePage> {
           Text(
             'Victoria Chase',
             textAlign: TextAlign.center,
-            style: AppTextStyles.headlineLarge.copyWith(
+            style: AppTextStyles.headlineMedium.copyWith(
               color: AppColors.primary,
             ),
           ),

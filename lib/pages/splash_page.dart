@@ -102,9 +102,7 @@ class _SplashPageState extends State<SplashPage>
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => const LoginPage(),
-        ),
+        MaterialPageRoute(builder: (_) => const LoginPage()),
       );
     });
   }
@@ -304,8 +302,8 @@ class _SplashPageState extends State<SplashPage>
                           // ------------------------------------------------
                           // IMAGE
                           // ------------------------------------------------
-                          Image.network(
-                            fashionImageUrl,
+                          Image.asset(
+                            'assets/images/splash_image.png',
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
                               return Container(
@@ -391,7 +389,7 @@ class _SplashPageState extends State<SplashPage>
                 const SizedBox(height: 12),
 
                 Text(
-                  'TAP ANYWHERE TO ENTER',
+                  'BEGIN YOUR STYLE JOURNEY',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.sourceSans3(
                     fontSize: 12,
@@ -473,7 +471,9 @@ class _SplashPageState extends State<SplashPage>
           foregroundColor: Colors.white,
           elevation: 2,
           shadowColor: Colors.black.withOpacity(0.15),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

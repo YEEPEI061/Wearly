@@ -233,7 +233,7 @@ class _WardrobePageState extends State<WardrobePage> {
         onChanged: _onSearchChanged,
         style: AppTextStyles.bodyMedium,
         decoration: InputDecoration(
-          hintText: 'Search your curated archive...',
+          hintText: 'Search your wardrobe...',
           hintStyle: AppTextStyles.bodyMedium.copyWith(
             color: AppColors.outlineVariant,
           ),
@@ -355,7 +355,7 @@ class _WardrobePageState extends State<WardrobePage> {
             const SizedBox(height: 4),
             Text(
               'Cashmere Overcoat',
-              style: AppTextStyles.headlineMedium.copyWith(
+              style: AppTextStyles.headlineSmall.copyWith(
                 color: AppColors.primary,
               ),
             ),
@@ -433,19 +433,28 @@ class _WardrobePageState extends State<WardrobePage> {
             const SizedBox(height: 8),
 
             Expanded(
-              child: Image.network(
-                item['image']!,
-                width: double.infinity,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) {
-                  return const Center(
-                    child: Icon(
-                      Icons.checkroom_outlined,
-                      size: 48,
-                      color: AppColors.outline,
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
+                  child: Container(
+                    width: 130,
+                    height: 170,
+                    color: AppColors.surfaceContainerHigh,
+                    child: Image.network(
+                      item['image']!,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) {
+                        return const Center(
+                          child: Icon(
+                            Icons.checkroom_outlined,
+                            size: 48,
+                            color: AppColors.outline,
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
             ),
 
@@ -455,7 +464,7 @@ class _WardrobePageState extends State<WardrobePage> {
               item['name']!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.headlineSmall.copyWith(
+              style: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.primary,
               ),
             ),
@@ -492,19 +501,32 @@ class _WardrobePageState extends State<WardrobePage> {
         ),
         child: Column(
           children: [
-            SizedBox(
-              height: 190,
-              width: double.infinity,
-              child: Image.network(
-                _loaferImage,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) {
-                  return const Icon(
-                    Icons.shopping_bag_outlined,
-                    size: 56,
-                    color: AppColors.outline,
-                  );
-                },
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+              child: Container(
+                height: 190,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.surfaceContainerHigh.withOpacity(0.5),
+                      Colors.transparent,
+                    ],
+                    begin: Alignment.bottomLeft,
+                    end: Alignment.topRight,
+                  ),
+                ),
+                child: Image.network(
+                  _loaferImage,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) {
+                    return const Icon(
+                      Icons.shopping_bag_outlined,
+                      size: 56,
+                      color: AppColors.outline,
+                    );
+                  },
+                ),
               ),
             ),
 
@@ -525,7 +547,7 @@ class _WardrobePageState extends State<WardrobePage> {
                   const SizedBox(height: 4),
                   Text(
                     'Glazed Leather Loafers',
-                    style: AppTextStyles.headlineMedium.copyWith(
+                    style: AppTextStyles.headlineSmall.copyWith(
                       color: AppColors.primary,
                     ),
                   ),

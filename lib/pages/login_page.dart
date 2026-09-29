@@ -85,6 +85,9 @@ class _LoginPageState extends State<LoginPage> {
                 child: TextField(
                   controller: controller,
                   obscureText: password && _obscurePassword,
+                  keyboardType: label == 'EMAIL ADDRESS'
+                      ? TextInputType.emailAddress
+                      : TextInputType.text,
                   style: AppTextStyles.bodyMedium,
                   decoration: InputDecoration(
                     isDense: true,
@@ -115,6 +118,12 @@ class _LoginPageState extends State<LoginPage> {
                       color: AppColors.onSurfaceVariant,
                     ),
                   ),
+                )
+              else if (label == 'EMAIL ADDRESS')
+                const Icon(
+                  Icons.mail_outline,
+                  size: 20,
+                  color: AppColors.onSurfaceVariant,
                 ),
             ],
           ),

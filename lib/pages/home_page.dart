@@ -341,7 +341,7 @@ class _HomePageState extends State<HomePage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
+            color: AppColors.surfaceContainerMedium,
             borderRadius: BorderRadius.circular(AppRadius.medium),
             boxShadow: [
               BoxShadow(
@@ -621,6 +621,8 @@ class _HomePageState extends State<HomePage> {
                 badge: '+4 NEW',
                 value: '142',
                 label: 'TOTAL PIECES',
+                badgeColor: const Color(0xFFE0F2E8),
+                badgeTextColor: const Color(0xFF218653),
               ),
             ),
 
@@ -632,6 +634,8 @@ class _HomePageState extends State<HomePage> {
                 badge: '94%',
                 value: '28 / 30',
                 label: 'ITEMS WORN',
+                badgeColor: AppColors.primary.withOpacity(0.35),
+                badgeTextColor: AppColors.primary,
               ),
             ),
           ],
@@ -645,6 +649,8 @@ class _HomePageState extends State<HomePage> {
     required String badge,
     required String value,
     required String label,
+    Color? badgeColor,
+    Color? badgeTextColor,
   }) {
     return Container(
       height: 155,
@@ -671,13 +677,13 @@ class _HomePageState extends State<HomePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.35),
+                  color: badgeColor ?? AppColors.primary.withOpacity(0.35),
                   borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
                 child: Text(
                   badge,
                   style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.primary,
+                    color: badgeTextColor ?? AppColors.primary,
                   ),
                 ),
               ),
@@ -844,7 +850,7 @@ class _HomePageState extends State<HomePage> {
           // DESCRIPTION
           // --------------------------------------------------------
           Text(
-            'Smart 7-day capsule packing & weather-synced rotation '
+            'Smart packing & weather-synced rotation '
             'tailored to your destination.',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.white.withOpacity(0.80),

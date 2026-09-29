@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
-import 'package:frontend/widgets/app_header_back.dart';
+import 'package:frontend/widgets/app_page_header.dart';
 
 class TravelOutfitPlannerPage extends StatefulWidget {
   const TravelOutfitPlannerPage({super.key});

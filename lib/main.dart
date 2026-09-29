@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/travel_outfit_planner_page.dart';
 import 'package:frontend/pages/home_page.dart';
-
-// import 'pages/wardrobe_page.dart';
 
 void main() {
   runApp(const WardrobeApp());

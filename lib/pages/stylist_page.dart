@@ -179,7 +179,7 @@ class _StylistPageState extends State<StylistPage>
       toolbarHeight: 64,
       titleSpacing: 24,
       title: Text(
-        'OUTFIT RECOMMENDATION',
+        'OUTFIT STYLIST',
         style: AppTextStyles.headlineSmall.copyWith(
           letterSpacing: 2,
           color: AppColors.primary,

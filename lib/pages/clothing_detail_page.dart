@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
-import 'package:frontend/widgets/app_header_back.dart';
+import 'package:frontend/widgets/app_page_header.dart';
 
 class ClothingDetailPage extends StatefulWidget {
   const ClothingDetailPage({super.key});
@@ -290,32 +290,32 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
           const SizedBox(height: 20),
 
           // Auto-save status
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(AppRadius.full),
-              border: Border.all(
-                color: AppColors.outlineVariant.withOpacity(0.3),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.sync, size: 13, color: AppColors.primary),
-                const SizedBox(width: 5),
-                Text(
-                  'DIRECT EDIT MODE • AUTO-SAVING',
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Container(
+          //   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          //   decoration: BoxDecoration(
+          //     color: AppColors.background,
+          //     borderRadius: BorderRadius.circular(AppRadius.full),
+          //     border: Border.all(
+          //       color: AppColors.outlineVariant.withOpacity(0.3),
+          //     ),
+          //   ),
+          //   child: Row(
+          //     mainAxisSize: MainAxisSize.min,
+          //     children: [
+          //       const Icon(Icons.sync, size: 13, color: AppColors.primary),
+          //       const SizedBox(width: 5),
+          //       Text(
+          //         'DIRECT EDIT MODE • AUTO-SAVING',
+          //         style: AppTextStyles.labelSmall.copyWith(
+          //           color: AppColors.onSurfaceVariant,
+          //           letterSpacing: 0.8,
+          //         ),
+          //       ),
+          //     ],
+          //   ),
+          // ),
 
-          const SizedBox(height: 12),
+          // const SizedBox(height: 12),
 
           // Brand
           GestureDetector(
@@ -478,6 +478,7 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.background,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                   border: Border.all(
                     color: AppColors.outlineVariant.withOpacity(0.3),
                   ),
@@ -541,6 +542,7 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.background,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                   border: Border.all(
                     color: AppColors.outlineVariant.withOpacity(0.3),
                   ),
@@ -584,6 +586,7 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.background,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                   border: Border.all(
                     color: AppColors.outlineVariant.withOpacity(0.3),
                   ),
@@ -629,7 +632,7 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Tags',
+                      'TAGS',
                       style: AppTextStyles.bodyMedium.copyWith(
                         color: AppColors.onSurfaceVariant,
                       ),
@@ -695,6 +698,7 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: AppColors.background,
+          borderRadius: BorderRadius.circular(AppRadius.small),
           border: Border.all(color: AppColors.outlineVariant.withOpacity(0.4)),
         ),
         child: Row(
@@ -730,6 +734,7 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerMedium,
+          borderRadius: BorderRadius.circular(AppRadius.small),
           border: Border.all(
             color: AppColors.outlineVariant.withOpacity(0.6),
             style: BorderStyle.solid,

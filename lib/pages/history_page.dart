@@ -31,7 +31,6 @@ class _HistoryPageState extends State<HistoryPage> {
       weekday: 'Wed',
       title: 'The Autumnal Tailor',
       description: 'Camel Trench • Cashmere Knit • Loafers',
-      location: 'Soho Gallery',
       image:
           'https://lh3.googleusercontent.com/aida-public/AB6AXuAM14j4pFi7nXvWpwZw76_6jegeUAaeH8SMSfQSCtDSGeNhEeiGcJsTBF81Aeb9BVkzfGoaPrYVcJ7Q4Rz1camGa2IlxFH_CxKAeA9swWzOmZ_pm-V0Ukwnm9LgrrJubr8R8O_VtxrmZFjnqqTrGoe7dq0NTAn4JzlRp6_pRajQwXf0r0EPQe0l2tkKyZCeIpEFJOLtJCfCzqV8oQktJ6wEvg9BmrVOurCIlBmH3UW9BLzJQOWTu7sS',
       layout: 1,
@@ -548,26 +547,6 @@ class _HistoryPageState extends State<HistoryPage> {
             child: _buildNetworkImage(history.image!),
           ),
         ),
-
-        if (history.location != null)
-          Positioned(
-            left: 8,
-            bottom: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.85),
-                borderRadius: BorderRadius.circular(AppRadius.small),
-              ),
-              child: Text(
-                history.location!,
-                style: AppTextStyles.labelSmall.copyWith(
-                  color: AppColors.white,
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -774,7 +753,6 @@ class _HistoryEntry {
   final String description;
 
   final String? image;
-  final String? location;
   final List<String>? images;
 
   final int layout;
@@ -786,7 +764,6 @@ class _HistoryEntry {
     required this.title,
     required this.description,
     this.image,
-    this.location,
     this.images,
     required this.layout,
   });

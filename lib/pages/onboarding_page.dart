@@ -268,7 +268,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     Text(
                       'Curated elegance,\ntailored to your essence.',
                       textAlign: TextAlign.center,
-                      style: AppTextStyles.headlineLarge.copyWith(height: 1.18),
+                      style: AppTextStyles.headlineMedium.copyWith(height: 1.18),
                     ),
 
                     const SizedBox(height: 8),
