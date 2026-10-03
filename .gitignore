@@ -1,9 +1,112 @@
+# =========================================================
+# Flutter / Dart
+# =========================================================
+
+# Dart / Flutter generated files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+coverage/
+
+# Flutter generated documentation
+**/doc/api/
+
+# iOS Flutter generated files
+**/ios/Flutter/.last_build_id
+
+# Android build outputs
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Flutter symbols / obfuscation
+app.*.symbols
+app.*.map.json
+
+
+# =========================================================
+# Python / FastAPI Backend
+# =========================================================
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / type checking
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+
+# =========================================================
+# Backend Generated Files
+# =========================================================
+
+# Uploaded clothing images
+backend/uploads/
+
+# AI processed images
+backend/processed/
+
+# Debug images
+backend/debug/
+
+# Local development wardrobe data
+backend/wardrobe.json
+
+
+# =========================================================
+# Environment / Secrets
+# =========================================================
+
+.env
+.env.*
+!.env.example
+
+
+# =========================================================
+# macOS
+# =========================================================
+
+.DS_Store
+
+
+# =========================================================
+# IDE
+# =========================================================
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+# Uncomment if you DON'T want to commit VS Code settings
+# .vscode/
+
+
+# =========================================================
 # Miscellaneous
+# =========================================================
+
 *.class
 *.log
-*.pyc
 *.swp
-.DS_Store
 .atom/
 .build/
 .buildlog/
@@ -11,35 +114,3 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release

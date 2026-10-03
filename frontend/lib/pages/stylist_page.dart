@@ -164,69 +164,6 @@ class _StylistPageState extends State<StylistPage>
   }
 
   // ============================================================
-  // HEADER
-  // ============================================================
-
-  Widget _buildHeader() {
-    return SliverAppBar(
-      pinned: true,
-      automaticallyImplyLeading: false,
-      backgroundColor: AppColors.background.withOpacity(0.95),
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      toolbarHeight: 64,
-      titleSpacing: 24,
-      title: Text(
-        'OUTFIT STYLIST',
-        style: AppTextStyles.headlineSmall.copyWith(
-          letterSpacing: 2,
-          color: AppColors.primary,
-        ),
-      ),
-      actions: [
-        IconButton(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Notifications will be connected later.'),
-              ),
-            );
-          },
-          icon: const Icon(
-            Icons.notifications_none_outlined,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(right: 24, left: 4),
-          child: GestureDetector(
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Profile will be connected later.'),
-                ),
-              );
-            },
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(AppRadius.full),
-              ),
-              child: const Icon(
-                Icons.person_outline,
-                size: 18,
-                color: AppColors.white,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ============================================================
   // INTRO
   // ============================================================
 
