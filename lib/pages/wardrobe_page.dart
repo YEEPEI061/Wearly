@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/history_page.dart';
-import 'package:frontend/pages/profile_page.dart';
-import 'package:frontend/pages/stylist_page.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_header.dart';
-import 'package:frontend/widgets/bottom_nav_bar.dart';
-import 'package:frontend/pages/home_page.dart';
 import 'package:frontend/pages/add_clothing_page.dart';
 
 class WardrobePage extends StatefulWidget {
@@ -97,42 +92,6 @@ class _WardrobePageState extends State<WardrobePage> {
     ).showSnackBar(SnackBar(content: Text('$name will open here.')));
   }
 
-  void _onNavigationSelected(int index) {
-    switch (index) {
-      case 0:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-        break;
-
-      case 1:
-        // Already on Wardrobe
-        break;
-
-      case 2:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const StylistPage()),
-        );
-        break;
-
-      case 3:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const HistoryPage()),
-        );
-        break;
-
-      case 4:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfilePage()),
-        );
-        break;
-    }
-  }
-
   List<Map<String, String>> get _filteredItems {
     List<Map<String, String>> items = _clothingItems;
 
@@ -204,17 +163,6 @@ class _WardrobePageState extends State<WardrobePage> {
               right: 24,
               bottom: 100,
               child: _buildFloatingActionButton(),
-            ),
-
-            // Reusable Bottom Navigation
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BottomNavBar(
-                selectedIndex: 1,
-                onItemSelected: _onNavigationSelected,
-              ),
             ),
           ],
         ),

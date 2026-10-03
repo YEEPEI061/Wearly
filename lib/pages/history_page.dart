@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/profile_page.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_header.dart';
-import 'package:frontend/widgets/bottom_nav_bar.dart';
-import 'package:frontend/pages/home_page.dart';
-import 'package:frontend/pages/wardrobe_page.dart';
-import 'package:frontend/pages/stylist_page.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -78,14 +73,23 @@ class _HistoryPageState extends State<HistoryPage> {
               slivers: [
                 AppHeader(
                   title: 'OUTFIT HISTORY',
-                  onNotificationTap: () {},
-                  onProfileTap: () {},
+                  onNotificationTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Notifications will be connected later.'),
+                      ),
+                    );
+                  },
+                  onProfileTap: () {
+                    // Navigate to Profile
+                  },
                 ),
 
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 90),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
+                      const SizedBox(height: 4),
                       _buildMonthHeader(),
                       const SizedBox(height: 16),
                       _buildRotationCard(),
@@ -99,19 +103,6 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                 ),
               ],
-            ),
-
-            // ====================================================
-            // BOTTOM NAVIGATION
-            // ====================================================
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BottomNavBar(
-                selectedIndex: 3,
-                onItemSelected: _onNavigationSelected,
-              ),
             ),
           ],
         ),
@@ -698,46 +689,6 @@ class _HistoryPageState extends State<HistoryPage> {
         ),
       ),
     );
-  }
-
-  // ============================================================
-  // NAVIGATION
-  // ============================================================
-
-  void _onNavigationSelected(int index) {
-    switch (index) {
-      case 0:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
-        break;
-
-      case 1:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const WardrobePage()),
-        );
-        break;
-
-      case 2:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const StylistPage()),
-        );
-        break;
-
-      case 3:
-        // Already on History.
-        break;
-
-      case 4:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfilePage()),
-        );
-        break;
-    }
   }
 }
 

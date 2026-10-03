@@ -30,30 +30,35 @@ class BottomNavBar extends StatelessWidget {
 
       child: SafeArea(
         top: false,
-        minimum: const EdgeInsets.only(top: 12, bottom: 12),
+        minimum: const EdgeInsets.only(top: 12),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(icon: Icons.home_outlined, label: 'HOME', index: 0),
 
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+              _buildNavItem(
+                icon: Icons.checkroom_outlined,
+                label: 'WARDROBE',
+                index: 1,
+              ),
 
-          children: [
-            _buildNavItem(icon: Icons.home_outlined, label: 'HOME', index: 0),
+              _buildNavItem(
+                icon: Icons.auto_awesome,
+                label: 'STYLIST',
+                index: 2,
+              ),
 
-            _buildNavItem(
-              icon: Icons.checkroom_outlined,
-              label: 'WARDROBE',
-              index: 1,
-            ),
+              _buildNavItem(icon: Icons.history, label: 'HISTORY', index: 3),
 
-            _buildNavItem(icon: Icons.auto_awesome, label: 'STYLIST', index: 2),
-
-            _buildNavItem(icon: Icons.history, label: 'HISTORY', index: 3),
-
-            _buildNavItem(
-              icon: Icons.person_outline,
-              label: 'PROFILE',
-              index: 4,
-            ),
-          ],
+              _buildNavItem(
+                icon: Icons.person_outline,
+                label: 'PROFILE',
+                index: 4,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -80,7 +85,10 @@ class BottomNavBar extends StatelessWidget {
             Icon(
               icon,
               size: 21,
-              color: selected ? AppColors.primary : AppColors.onSurfaceVariant,
+              weight: selected ? 700 : 400,
+              color: selected
+                  ? AppColors.primary
+                  : const Color.fromARGB(255, 95, 98, 103),
             ),
 
             const SizedBox(height: 5),
@@ -90,8 +98,8 @@ class BottomNavBar extends StatelessWidget {
               style: AppTextStyles.labelSmall.copyWith(
                 color: selected
                     ? AppColors.primary
-                    : AppColors.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    : const Color.fromARGB(255, 95, 98, 103),
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
               ),
             ),
           ],

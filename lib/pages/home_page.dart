@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/history_page.dart';
-import 'package:frontend/pages/profile_page.dart';
-import 'package:frontend/pages/stylist_page.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -9,8 +6,6 @@ import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_header.dart';
-import 'package:frontend/widgets/bottom_nav_bar.dart';
-import 'package:frontend/pages/wardrobe_page.dart';
 import 'package:frontend/pages/travel_outfit_planner_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -143,45 +138,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   // ============================================================
-  // BOTTOM NAV
-  // ============================================================
-  void _onNavigationSelected(int index) {
-    switch (index) {
-      case 0:
-        // Already on Home
-        break;
-
-      case 1:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const WardrobePage()),
-        );
-        break;
-
-      case 2:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const StylistPage()),
-        );
-        break;
-
-      case 3:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const HistoryPage()),
-        );
-        break;
-
-      case 4:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfilePage()),
-        );
-        break;
-    }
-  }
-
-  // ============================================================
   // GREETING
   // ============================================================
 
@@ -248,7 +204,19 @@ class _HomePageState extends State<HomePage> {
           children: [
             CustomScrollView(
               slivers: [
-                const AppHeader(title: 'HOME'),
+                AppHeader(
+                  title: 'HOME',
+                  onNotificationTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Notifications will be connected later.'),
+                      ),
+                    );
+                  },
+                  onProfileTap: () {
+                    // Navigate to Profile
+                  },
+                ),
                 // ========================================================
                 // CONTENT
                 // ========================================================
@@ -281,19 +249,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ],
-            ),
-
-            // ============================================================
-            // FLOATING BOTTOM NAVIGATION
-            // ============================================================
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BottomNavBar(
-                selectedIndex: 0,
-                onItemSelected: _onNavigationSelected,
-              ),
             ),
           ],
         ),

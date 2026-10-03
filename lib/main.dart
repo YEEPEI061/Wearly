@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/home_page.dart';
+import 'package:frontend/pages/main_page.dart';
 
 void main() {
   runApp(const WardrobeApp());
@@ -23,7 +23,7 @@ class WardrobeApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6E6259)),
       ),
 
-      home: const HomePage(),
+      home: const MainPage(),
     );
   }
 }

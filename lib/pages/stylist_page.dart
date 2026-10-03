@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/history_page.dart';
-import 'package:frontend/pages/profile_page.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
-import 'package:frontend/widgets/bottom_nav_bar.dart';
-import 'package:frontend/pages/home_page.dart';
-import 'package:frontend/pages/wardrobe_page.dart';
+import 'package:frontend/widgets/app_header.dart';
 
 class StylistPage extends StatefulWidget {
   const StylistPage({super.key});
@@ -132,12 +128,25 @@ class _StylistPageState extends State<StylistPage>
           children: [
             CustomScrollView(
               slivers: [
-                _buildHeader(),
+                AppHeader(
+                  title: 'OUTFIT STYLIST',
+                  onNotificationTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Notifications will be connected later.'),
+                      ),
+                    );
+                  },
+                  onProfileTap: () {
+                    // Navigate to Profile
+                  },
+                ),
 
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 10, 24, 90),
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 90),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
+                      const SizedBox(height: 8),
                       _buildIntro(),
                       const SizedBox(height: 20),
                       _buildRecommendationCard(),
@@ -147,17 +156,6 @@ class _StylistPageState extends State<StylistPage>
                   ),
                 ),
               ],
-            ),
-
-            // Bottom navigation
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BottomNavBar(
-                selectedIndex: 2,
-                onItemSelected: _onNavigationSelected,
-              ),
             ),
           ],
         ),
@@ -1233,44 +1231,5 @@ class _StylistPageState extends State<StylistPage>
         ),
       ],
     );
-  }
-
-  // ============================================================
-  // NAVIGATION
-  // ============================================================
-
-  void _onNavigationSelected(int index) {
-    switch (index) {
-      case 0:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-        break;
-
-      case 1:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const WardrobePage()),
-        );
-        break;
-
-      case 2:
-        break;
-
-      case 3:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const HistoryPage()),
-        );
-        break;
-
-      case 4:
-          Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfilePage()),
-        );
-        break;
-    }
   }
 }
