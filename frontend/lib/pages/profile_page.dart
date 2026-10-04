@@ -64,7 +64,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 // MAIN CONTENT
                 // ==================================================
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 90),
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 38),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       _buildProfileHeader(),

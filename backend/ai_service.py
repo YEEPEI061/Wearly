@@ -202,13 +202,13 @@ def cosine_similarity(a, b) -> float:
 
 def detect_clothing(image_path: str) -> Dict:
     """
-    Uses FASHN Human Parser when available.
+    Uses FASHN Human Parser semantic segmentation.
 
     Returns:
-        category
-        confidence
-        bbox
-        mask
+        category: top / pants / skirt / dress
+        confidence: segmentation confidence estimate
+        bbox: bounding box of the detected clothing region
+        mask: segmentation mask
     """
 
     image = load_image(image_path)
@@ -222,51 +222,170 @@ def detect_clothing(image_path: str) -> Dict:
         }
 
     try:
-        result = _parser(image)
+        # FASHN Human Parser uses .predict()
+        segmentation = _parser.predict(image)
 
-        # The exact parser output can vary between versions.
-        # Keep this defensive so the backend does not crash.
-        if isinstance(result, dict):
-            labels = result.get("labels")
-            boxes = result.get("boxes")
-            masks = result.get("masks")
+        if segmentation is None:
+            raise ValueError("FASHN returned no segmentation result.")
 
-            category = "top"
+        # -----------------------------------------------------------
+        # Get FASHN label mapping
+        # -----------------------------------------------------------
 
-            if labels:
-                for label in labels:
-                    label_lower = str(label).lower()
+        labels = _parser.get_labels()
 
-                    if label_lower in (
-                        "dress",
-                        "skirt",
-                        "pants",
-                        "top",
-                    ):
-                        category = label_lower
-                        break
+        # -----------------------------------------------------------
+        # Count pixels for each clothing label
+        # -----------------------------------------------------------
+
+        clothing_labels = {
+            "top",
+            "pants",
+            "skirt",
+            "dress",
+        }
+
+        label_pixel_counts = {}
+
+        for label_id, label_name in labels.items():
+            label_name = str(label_name).lower()
+
+            if label_name in clothing_labels:
+                count = int(
+                    np.sum(segmentation == label_id)
+                )
+
+                if count > 0:
+                    label_pixel_counts[label_name] = count
+
+        # -----------------------------------------------------------
+        # No clothing detected
+        # -----------------------------------------------------------
+
+        if not label_pixel_counts:
+            print(
+                "⚠ FASHN did not detect supported clothing labels."
+            )
 
             return {
-                "category": category,
-                "confidence": 1.0,
-                "bbox": boxes[0] if boxes else None,
-                "mask": masks[0] if masks else None,
+                "category": "top",
+                "confidence": 0.0,
+                "bbox": None,
+                "mask": None,
             }
 
+        # -----------------------------------------------------------
+        # Select clothing category with most pixels
+        # -----------------------------------------------------------
+
+        category = max(
+            label_pixel_counts,
+            key=label_pixel_counts.get,
+        )
+
+        mask = segmentation == next(
+            label_id
+            for label_id, label_name in labels.items()
+            if str(label_name).lower() == category
+        )
+
+        # -----------------------------------------------------------
+        # Calculate bounding box from mask
+        # -----------------------------------------------------------
+
+        ys, xs = np.where(mask)
+
+        if len(xs) == 0 or len(ys) == 0:
+            bbox = None
+        else:
+            x1 = int(xs.min())
+            y1 = int(ys.min())
+            x2 = int(xs.max()) + 1
+            y2 = int(ys.max()) + 1
+
+            bbox = [x1, y1, x2, y2]
+
+        # -----------------------------------------------------------
+        # Calculate approximate confidence
+        #
+        # This is NOT model probability.
+        # It represents how dominant the selected clothing
+        # segmentation is among the supported clothing labels.
+        # -----------------------------------------------------------
+
+        total_clothing_pixels = sum(
+            label_pixel_counts.values()
+        )
+
+        if total_clothing_pixels > 0:
+            confidence = (
+                label_pixel_counts[category]
+                / total_clothing_pixels
+            )
+        else:
+            confidence = 0.0
+
+        confidence = float(
+            np.clip(
+                confidence,
+                0.0,
+                1.0,
+            )
+        )
+
+        print(
+            f"✓ FASHN detected: "
+            f"{category} "
+            f"(confidence={confidence:.3f})"
+        )
+
+        return {
+            "category": category,
+            "confidence": confidence,
+            "bbox": bbox,
+            "mask": mask,
+        }
+
     except Exception as e:
-        print(f"⚠ Clothing detection failed: {e}")
+        print(
+            f"⚠ Clothing detection failed: {e}"
+        )
 
-    return {
-        "category": "top",
-        "confidence": 0.0,
-        "bbox": None,
-        "mask": None,
-    }
-
-
+        return {
+            "category": "top",
+            "confidence": 0.0,
+            "bbox": None,
+            "mask": None,
+        }
+    
 # -------------------------------------------------------------------
 # Clothing image processing
 # -------------------------------------------------------------------
+def _crop_from_bbox(
+    image: Image.Image,
+    bbox,
+) -> Image.Image:
+
+    if bbox:
+        try:
+            x1, y1, x2, y2 = map(
+                int,
+                bbox,
+            )
+
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(image.width, x2)
+            y2 = min(image.height, y2)
+
+            return image.crop(
+                (x1, y1, x2, y2)
+            )
+
+        except Exception:
+            pass
+
+    return image
 
 def create_processed_image(
     image_path: str,
@@ -278,49 +397,110 @@ def create_processed_image(
     detection = detect_clothing(image_path)
 
     bbox = detection.get("bbox")
+    mask = detection.get("mask")
 
-    if bbox:
+    # ---------------------------------------------------------------
+    # Extract clothing using segmentation mask
+    # ---------------------------------------------------------------
+
+    if mask is not None:
         try:
-            x1, y1, x2, y2 = map(int, bbox)
+            # Convert FASHN mask to PIL grayscale mask.
+            mask_image = Image.fromarray(
+                (mask.astype("uint8") * 255)
+            ).convert("L")
 
-            x1 = max(0, x1)
-            y1 = max(0, y1)
-            x2 = min(image.width, x2)
-            y2 = min(image.height, y2)
+            # Make sure mask matches original image size.
+            if mask_image.size != image.size:
+                mask_image = mask_image.resize(
+                    image.size,
+                    Image.Resampling.NEAREST,
+                )
 
-            cropped = image.crop(
-                (x1, y1, x2, y2)
+            # Convert original image to RGBA.
+            image_rgba = image.convert("RGBA")
+
+            # Create transparent image.
+            clothing = Image.new(
+                "RGBA",
+                image_rgba.size,
+                (0, 0, 0, 0),
             )
 
-        except Exception:
-            cropped = image
-    else:
-        cropped = image
+            # Keep only the detected clothing.
+            clothing.paste(
+                image_rgba,
+                (0, 0),
+                mask_image,
+            )
 
+            # Find actual visible clothing area.
+            clothing_bbox = clothing.getbbox()
+
+            if clothing_bbox:
+                clothing = clothing.crop(
+                    clothing_bbox
+                )
+            else:
+                clothing = image_rgba
+
+        except Exception as e:
+            print(
+                f"⚠️ Mask processing failed: {e}"
+            )
+
+            # Fallback to bounding-box crop.
+            clothing = _crop_from_bbox(
+                image,
+                bbox,
+            )
+
+    else:
+        # -----------------------------------------------------------
+        # Fallback if segmentation mask is unavailable
+        # -----------------------------------------------------------
+
+        clothing = _crop_from_bbox(
+            image,
+            bbox,
+        )
+
+    # ---------------------------------------------------------------
     # Consistent Wearly canvas
+    # ---------------------------------------------------------------
+
     canvas_size = 1000
 
     background = Image.new(
-        "RGB",
+        "RGBA",
         (canvas_size, canvas_size),
-        (248, 247, 244),
+        (248, 247, 244, 255),
     )
 
-    cropped.thumbnail(
+    # Resize clothing while keeping aspect ratio.
+    clothing.thumbnail(
         (850, 850),
         Image.Resampling.LANCZOS,
     )
 
-    x = (canvas_size - cropped.width) // 2
-    y = (canvas_size - cropped.height) // 2
+    # Centre clothing.
+    x = (
+        canvas_size - clothing.width
+    ) // 2
 
-    background.paste(
-        cropped,
+    y = (
+        canvas_size - clothing.height
+    ) // 2
+
+    background.alpha_composite(
+        clothing,
         (x, y),
     )
 
-    background.save(
+    # Save as JPEG.
+    background.convert("RGB").save(
         output_path,
+        "JPEG",
         quality=95,
     )
 
@@ -329,7 +509,6 @@ def create_processed_image(
         "confidence": detection["confidence"],
         "bbox": bbox,
     }
-
 
 # -------------------------------------------------------------------
 # CLIP style classification
@@ -377,18 +556,19 @@ def classify_with_clip(
             torch.argmax(probabilities).item()
         )
 
-        confidence = float(
-            probabilities[index].item()
+        confidence = _safe_float(
+            probabilities[index].item(),
+            default=0.0,
         )
 
         return labels[index], confidence
 
     except Exception as e:
-        print(f"⚠ CLIP classification failed: {e}")
+        print(
+            f"⚠ CLIP classification failed: {e}"
+        )
 
         return labels[0], 0.0
-
-
 # -------------------------------------------------------------------
 # FashionCLIP embedding
 # -------------------------------------------------------------------
@@ -514,7 +694,58 @@ def detect_basic_color(
 
     return "multicolor", 0.40
 
+# -------------------------------------------------------------------
+# Helper
+# -------------------------------------------------------------------
 
+
+def _safe_float(value, default=0.0) -> float:
+    """
+    Convert a value into JSON-safe finite float.
+    """
+
+    try:
+        value = float(value)
+
+        if not math.isfinite(value):
+            return default
+
+        return value
+
+    except (TypeError, ValueError):
+        return default
+
+def _safe_embedding(embedding) -> List[float]:
+    """
+    Convert an embedding into a JSON-safe list of finite floats.
+    """
+
+    if embedding is None:
+        return []
+
+    try:
+        array = np.asarray(
+            embedding,
+            dtype=np.float32,
+        )
+
+        array = np.nan_to_num(
+            array,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+
+        return array.astype(
+            np.float32
+        ).tolist()
+
+    except Exception as e:
+        print(
+            f"⚠ Embedding sanitisation failed: {e}"
+        )
+        return []
+    
 # -------------------------------------------------------------------
 # Full clothing analysis
 # -------------------------------------------------------------------
@@ -560,7 +791,7 @@ def analyse_clothing(
         "color_confidence": color_confidence,
         "style": style,
         "style_confidence": style_confidence,
-        "embedding": embedding,
+        "embedding": _safe_embedding(embedding),
         "model_name": (
             "FASHN Human Parser + "
             "OpenAI CLIP + FashionCLIP"

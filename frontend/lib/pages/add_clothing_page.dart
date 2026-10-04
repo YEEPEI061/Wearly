@@ -1,8 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import 'package:frontend/models/clothing_item.dart';
+import 'package:frontend/services/api_service.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_page_header.dart';
+import 'package:frontend/pages/clothing_detail_page.dart';
 
 class AddClothingPage extends StatefulWidget {
   const AddClothingPage({super.key});
@@ -12,47 +19,204 @@ class AddClothingPage extends StatefulWidget {
 }
 
 class _AddClothingPageState extends State<AddClothingPage> {
+  final ImagePicker _picker = ImagePicker();
+
   bool _flashOn = false;
+  bool _isProcessing = false;
 
-  // ============================================================
-  // IMAGES
-  // ============================================================
+  File? _selectedImage;
+  // ClothingItem? _aiResult;
 
-  final String _scanImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDEG_U13NF_Iw8pRwFjd4XRt6O_aHPRvJXLWgX5J3CR8gGJ_R7UkN7gHnJYyP_AkWB_FLuV_A79pijoxlXu3fk9aLrJDnxynlfi3CrVgMxYb1BwQTuju1sQrIf0xha1XpOQ6-K-EheDuB-wMgIxu_VvBbFEu1gOFsXnEv7VWpJZOO_ShrEQDTuiiWGFw4PjbfaM006HM47vlkeYBE3MfwpLj1zmnERcx5CxsGR5zWDgrHkt5QRTd410';
+  // Keep the original visual design.
+  // These now act as real local recent scans.
+  final List<File> _recentScans = [];
 
-  final List<String> _recentScans = [
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBeqw-u8cAZnOf8OY_bSuJLQsZvBqa-sMzxftFNV_FNdAtDGw5KecWKHMO5bpM4tYZynQ9QufzhiwIWvuiNfPaH3Qcd5zijKFmnCZSocf4cyz0VpKEg8BDqHLTEEUzo7ewr5ECVx-T45JotbwSr0vfAfeZqOybUCAIvn8UJa-0k8i4h21HGOs0YPg72tm1ThdMnUfX9QloxxSfw95J2_L9j0C1MKEGNNJ0ZuQ0-NvMupsGKLn27DGR-',
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuDiuTtVeEH2AoeI5m8zV-kPq-a5_XwYXSrmeI0iTtn0d7DFwBiKY-1G3ejOkQgta-xcxvm2FhpoJGbf4Vq4OOZEJZdNqHIzrnBT02SxDBtLiQMyutONtnZXqYAeCDCK8wL-2Y08bVZOLvwQNcHq4oaIHwTRRQGpefza9CWmdm6UZgCHhtcM_hqIVNB4udcaO9zxkBO1LeSoRFmvlxzHoJ1_G_Wl5kYlXI_pc-1lBeD1aixm9W3H2nvX',
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuA-xvRhsrbKQNr5N8qC3sOYjHvS6nY_RgtMn5oc1ZQIiI6JQPXQQAusyV7tg05ZLxY4LKCi93BxVQto2P7laE94S1ZQAYhOGi9TZRDX0p9qy2uKmByMLhZRWbLqz0ywdGpuMi-OdlNdMXfrDjTb5Yf5gqpGQbTMDvy3bLUYlE4YufBLNx9zjU85ZzbfJWJlVfb5llRJbu-5QMBPx1xnGIdZ_RKIXuiYNgQJoEY7eGjiQv8qaS2OAx_k',
-  ];
+  // Default category sent to the backend.
+  String _selectedCategory = 'upper';
 
   // ============================================================
   // ACTIONS
   // ============================================================
 
-  void _openGallery() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Photo library will be connected later.')),
-    );
+  Future<void> _openGallery() async {
+    if (_isProcessing) return;
+
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+      );
+
+      if (image == null) return;
+
+      setState(() {
+        _selectedImage = File(image.path);
+      });
+    } catch (e) {
+      _showError('Unable to open your photo library.');
+    }
   }
 
-  void _captureGarment() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Capturing garment...')));
+  Future<void> _captureGarment() async {
+    if (_isProcessing) return;
+
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+      );
+
+      if (image == null) return;
+
+      setState(() {
+        _selectedImage = File(image.path);
+      });
+    } catch (e) {
+      _showError('Unable to open the camera.');
+    }
   }
 
   void _toggleFlash() {
     setState(() {
       _flashOn = !_flashOn;
     });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            _flashOn
+                ? 'Flash indicator turned on.'
+                : 'Flash indicator turned off.',
+          ),
+          duration: const Duration(seconds: 1),
+        ),
+      );
   }
 
+  // ============================================================
+  // AI ANALYSIS
+  // ============================================================
+
+  Future<void> _analyseClothing() async {
+    if (_selectedImage == null) {
+      _showError('Please select or capture a clothing photo first.');
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final ClothingItem result = await ApiService.processClothing(
+        image: _selectedImage!,
+        category: _selectedCategory,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isProcessing = false;
+      });
+
+      // Go to Clothing Detail for user confirmation/editing.
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ClothingDetailPage(
+            item: result,
+            isNewItem: true,
+            previewImage: _selectedImage,
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      // Reset Add Clothing page after returning.
+      setState(() {
+        _selectedImage = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isProcessing = false;
+      });
+
+      _showError(_cleanErrorMessage(e));
+    }
+  }
+  // ============================================================
+  // RESET
+  // ============================================================
+
+  void _resetScan() {
+    if (_isProcessing) return;
+
+    setState(() {
+      _selectedImage = null;
+    });
+  }
+
+  // ============================================================
+  // CATEGORY
+  // ============================================================
+
+  void _selectCategory(String category) {
+    if (_isProcessing) return;
+
+    setState(() {
+      _selectedCategory = category;
+    });
+  }
+
+  // ============================================================
+  // RECENT SCANS
+  // ============================================================
+
   void _openRecentScan(int index) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Recent scan ${index + 1} selected.')),
-    );
+    if (index < 0 || index >= _recentScans.length) return;
+
+    setState(() {
+      _selectedImage = _recentScans[index];
+    });
+  }
+
+  // ============================================================
+  // MESSAGES
+  // ============================================================
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+  }
+
+  String _cleanErrorMessage(Object error) {
+    final message = error.toString();
+
+    if (message.startsWith('Exception: ')) {
+      return message.substring('Exception: '.length);
+    }
+
+    return message;
   }
 
   // ============================================================
@@ -63,11 +227,10 @@ class _AddClothingPageState extends State<AddClothingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-
       body: SafeArea(
         child: Column(
           children: [
-            AppPageHeader(title: 'ADD CLOTHING'),
+            const AppPageHeader(title: 'ADD CLOTHING'),
 
             Expanded(
               child: SingleChildScrollView(
@@ -79,6 +242,16 @@ class _AddClothingPageState extends State<AddClothingPage> {
                     const SizedBox(height: 24),
 
                     _buildScanArea(),
+
+                    const SizedBox(height: 20),
+
+                    if (_selectedImage != null && !_isProcessing)
+                      _buildCategorySelector(),
+
+                    if (_selectedImage != null && !_isProcessing)
+                      const SizedBox(height: 20),
+
+                    if (_selectedImage != null) _buildAnalyseButton(),
 
                     const SizedBox(height: 20),
 
@@ -96,10 +269,6 @@ class _AddClothingPageState extends State<AddClothingPage> {
       ),
     );
   }
-
-  // ============================================================
-  // HEADER
-  // ============================================================
 
   // ============================================================
   // INTRO
@@ -164,51 +333,60 @@ class _AddClothingPageState extends State<AddClothingPage> {
         ),
         child: Stack(
           children: [
-            // Background image
+            // ====================================================
+            // IMAGE
+            // ====================================================
             Positioned.fill(
-              child: Image.network(
-                _scanImage,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) {
-                  return Container(
-                    color: AppColors.primaryContainer,
-                    child: const Center(
-                      child: Icon(
-                        Icons.checkroom_outlined,
-                        size: 64,
-                        color: AppColors.primaryDim,
+              child: _selectedImage != null
+                  ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                  : Container(
+                      color: AppColors.primaryContainer,
+                      child: const Center(
+                        child: Icon(
+                          Icons.checkroom_outlined,
+                          size: 64,
+                          color: AppColors.primaryDim,
+                        ),
                       ),
                     ),
-                  );
-                },
-              ),
             ),
 
-            // Dark overlay
+            // ====================================================
+            // OVERLAY
+            // ====================================================
             Positioned.fill(
-              child: Container(color: AppColors.primary.withOpacity(0.25)),
-            ),
-
-            // AI scanning line
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 127,
               child: Container(
-                height: 2,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryDim,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryDim.withOpacity(0.8),
-                      blurRadius: 12,
-                    ),
-                  ],
+                color: AppColors.primary.withOpacity(
+                  _selectedImage != null ? 0.12 : 0.25,
                 ),
               ),
             ),
 
-            // Optical guide
+            // ====================================================
+            // SCANNING LINE
+            // ====================================================
+            if (_selectedImage == null || _isProcessing)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 127,
+                child: Container(
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryDim,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryDim.withOpacity(0.8),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // ====================================================
+            // OPTICAL GUIDE
+            // ====================================================
             Positioned(
               left: 32,
               right: 32,
@@ -238,7 +416,11 @@ class _AddClothingPageState extends State<AddClothingPage> {
                           borderRadius: BorderRadius.circular(AppRadius.small),
                         ),
                         child: Text(
-                          'AI ACTIVE',
+                          _isProcessing
+                              ? 'AI ANALYSING'
+                              : _selectedImage != null
+                              ? 'IMAGE READY'
+                              : 'AI ACTIVE',
                           style: AppTextStyles.labelSmall.copyWith(
                             color: AppColors.white,
                             letterSpacing: 1.2,
@@ -246,18 +428,77 @@ class _AddClothingPageState extends State<AddClothingPage> {
                         ),
                       ),
                     ),
+
+                    // Empty state instruction
+                    if (_selectedImage == null)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.35),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
+                          ),
+                          child: Text(
+                            'Select or capture a garment',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.white,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
             ),
 
-            // AI result card
-            // Positioned(
-            //   left: 16,
-            //   right: 16,
-            //   bottom: 16,
-            //   child: _buildAiResult(),
-            // ),
+            // ====================================================
+            // PROCESSING OVERLAY
+            // ====================================================
+            if (_isProcessing)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withOpacity(0.52),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            color: AppColors.white,
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        Text(
+                          'Analysing garment...',
+                          style: AppTextStyles.labelMedium.copyWith(
+                            color: AppColors.white,
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        Text(
+                          'Detecting clothing, colour and style',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.white.withOpacity(0.85),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -265,72 +506,102 @@ class _AddClothingPageState extends State<AddClothingPage> {
   }
 
   // ============================================================
-  // AI RESULT
+  // CATEGORY SELECTOR
   // ============================================================
 
-  // Widget _buildAiResult() {
-  //   return Container(
-  //     padding: const EdgeInsets.all(14),
-  //     decoration: BoxDecoration(
-  //       color: AppColors.background.withOpacity(0.96),
-  //       borderRadius: BorderRadius.circular(AppRadius.medium),
-  //       boxShadow: [
-  //         BoxShadow(
-  //           color: Colors.black.withOpacity(0.16),
-  //           blurRadius: 16,
-  //           offset: const Offset(0, 4),
-  //         ),
-  //       ],
-  //     ),
-  //     child: Row(
-  //       children: [
-  //         Container(
-  //           width: 36,
-  //           height: 36,
-  //           decoration: BoxDecoration(
-  //             color: AppColors.primary,
-  //             borderRadius: BorderRadius.circular(AppRadius.small),
-  //           ),
-  //           child: Center(
-  //             child: Text(
-  //               'AI',
-  //               style: AppTextStyles.labelMedium.copyWith(
-  //                 color: AppColors.white,
-  //               ),
-  //             ),
-  //           ),
-  //         ),
+  Widget _buildCategorySelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'CLOTHING TYPE',
+          style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.primary,
+            letterSpacing: 1.0,
+          ),
+        ),
 
-  //         const SizedBox(width: 12),
+        const SizedBox(height: 10),
 
-  //         Expanded(
-  //           child: Column(
-  //             crossAxisAlignment: CrossAxisAlignment.start,
-  //             children: [
-  //               Text(
-  //                 'Structured Wool Coat',
-  //                 style: AppTextStyles.labelMedium.copyWith(
-  //                   color: AppColors.primary,
-  //                 ),
-  //               ),
+        Row(
+          children: [
+            _buildCategoryButton('upper', 'Upper'),
+            const SizedBox(width: 8),
+            _buildCategoryButton('lower', 'Lower'),
+            const SizedBox(width: 8),
+            _buildCategoryButton('full', 'Full'),
+          ],
+        ),
 
-  //               const SizedBox(height: 2),
+        const SizedBox(height: 8),
 
-  //               Text(
-  //                 'Confidence 98.4% • Camel',
-  //                 style: AppTextStyles.bodySmall.copyWith(
-  //                   color: AppColors.secondary,
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
+        Text(
+          'Choose the garment type for more accurate AI analysis.',
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
 
-  //         const Icon(Icons.check_circle, size: 24, color: AppColors.primary),
-  //       ],
-  //     ),
-  //   );
-  // }
+  Widget _buildCategoryButton(String value, String label) {
+    final bool selected = _selectedCategory == value;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _selectCategory(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 48,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary
+                : AppColors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: AppTextStyles.labelMedium.copyWith(
+                color: selected ? AppColors.white : AppColors.primary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ANALYSE BUTTON
+  // ============================================================
+
+  Widget _buildAnalyseButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton.icon(
+        onPressed: _isProcessing ? null : _analyseClothing,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+          ),
+        ),
+        icon: const Icon(Icons.auto_awesome, size: 20),
+        label: Text(
+          'ANALYSE WITH AI',
+          style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.white,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
 
   // ============================================================
   // CAMERA CONTROLS
@@ -341,39 +612,46 @@ class _AddClothingPageState extends State<AddClothingPage> {
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Gallery
+        // ========================================================
+        // GALLERY
+        // ========================================================
         GestureDetector(
-          onTap: _openGallery,
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(AppRadius.large),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.photo_library_outlined,
-              size: 22,
-              color: AppColors.primary,
+          onTap: _isProcessing ? null : _openGallery,
+          child: Opacity(
+            opacity: _isProcessing ? 0.4 : 1,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(AppRadius.large),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.photo_library_outlined,
+                size: 22,
+                color: AppColors.primary,
+              ),
             ),
           ),
         ),
 
-        // Camera
+        // ========================================================
+        // CAMERA
+        // ========================================================
         GestureDetector(
-          onTap: _captureGarment,
+          onTap: _isProcessing ? null : _captureGarment,
           child: Container(
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              color: _isProcessing ? AppColors.primaryDim : AppColors.primary,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
@@ -391,29 +669,40 @@ class _AddClothingPageState extends State<AddClothingPage> {
           ),
         ),
 
-        // Flash
+        // ========================================================
+        // FLASH / RESET
+        // ========================================================
         GestureDetector(
-          onTap: _toggleFlash,
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: _flashOn
-                  ? AppColors.primaryDim
-                  : AppColors.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(AppRadius.large),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Icon(
-              _flashOn ? Icons.flash_on : Icons.flash_off_outlined,
-              size: 22,
-              color: AppColors.primary,
+          onTap: _isProcessing
+              ? null
+              : (_selectedImage != null ? _resetScan : _toggleFlash),
+          child: Opacity(
+            opacity: _isProcessing ? 0.4 : 1,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _selectedImage != null
+                    ? AppColors.surfaceContainerHigh
+                    : _flashOn
+                    ? AppColors.primaryDim
+                    : AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(AppRadius.large),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                _selectedImage != null
+                    ? Icons.refresh
+                    : (_flashOn ? Icons.flash_on : Icons.flash_off_outlined),
+                size: 22,
+                color: AppColors.primary,
+              ),
             ),
           ),
         ),
@@ -441,7 +730,7 @@ class _AddClothingPageState extends State<AddClothingPage> {
             ),
 
             Text(
-              '3 items pending',
+              '${_recentScans.length} items',
               style: AppTextStyles.bodySmall.copyWith(
                 color: AppColors.secondary,
               ),
@@ -479,7 +768,7 @@ class _AddClothingPageState extends State<AddClothingPage> {
           width: 64,
           height: 80,
           color: AppColors.surfaceContainerHigh,
-          child: Image.network(
+          child: Image.file(
             _recentScans[index],
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) {
@@ -496,7 +785,7 @@ class _AddClothingPageState extends State<AddClothingPage> {
 
   Widget _buildAddRecentScan() {
     return GestureDetector(
-      onTap: _openGallery,
+      onTap: _isProcessing ? null : _openGallery,
       child: Container(
         width: 64,
         height: 80,
@@ -507,5 +796,29 @@ class _AddClothingPageState extends State<AddClothingPage> {
         child: const Icon(Icons.add, size: 24, color: AppColors.secondary),
       ),
     );
+  }
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
+  String _displayCategory(String? category) {
+    switch (category?.toLowerCase()) {
+      case 'upper':
+      case 'top':
+        return 'Upper';
+
+      case 'lower':
+      case 'pants':
+      case 'skirt':
+        return 'Lower';
+
+      case 'full':
+      case 'dress':
+        return 'Full';
+
+      default:
+        return category ?? 'Unknown';
+    }
   }
 }

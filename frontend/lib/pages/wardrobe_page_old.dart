@@ -245,7 +245,7 @@ class _WardrobePageState extends State<WardrobePage> {
   // ========================================================
 
   Widget buildClothingCard(ClothingItem item) {
-    final imageUrl = '${ApiService.baseUrl}${item.imageUrl}';
+    final imageUrl = '${ApiService.baseUrl}${item.imagePath}';
 
     return Card(
       clipBehavior: Clip.antiAlias,

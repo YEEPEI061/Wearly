@@ -143,7 +143,7 @@ class _StylistPageState extends State<StylistPage>
                 ),
 
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 90),
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 38),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       const SizedBox(height: 8),

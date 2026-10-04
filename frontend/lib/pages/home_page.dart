@@ -221,7 +221,7 @@ class _HomePageState extends State<HomePage> {
                 // CONTENT
                 // ========================================================
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 90),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 38),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       _buildGreeting(),

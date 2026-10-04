@@ -6,15 +6,19 @@ from fastapi import (
     File,
     HTTPException,
 )
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from database.clothing import create_clothing_item
 from wardrobe import (
+    PROCESSED_DIR,
     process_clothing,
     get_wardrobe,
     get_clothing_item,
     delete_clothing,
+    reset_generated_outfits,
 )
 
 from outfit import (
@@ -22,6 +26,7 @@ from outfit import (
     generate_another_outfit,
     submit_feedback,
 )
+from fastapi.staticfiles import StaticFiles
 
 
 # -------------------------------------------------------------------
@@ -31,6 +36,12 @@ from outfit import (
 app = FastAPI(
     title="Wearly AI Wardrobe API",
     version="1.0.0",
+)
+
+app.mount(
+    "/processed",
+    StaticFiles(directory=PROCESSED_DIR),
+    name="processed",
 )
 
 
@@ -98,7 +109,47 @@ def wardrobe_item(
 
     return item
 
+class SaveClothingRequest(BaseModel):
+    name: str
+    category: str
+    subcategory: str
+    brand: str
+    color: str
+    style: str
+    material: str
+    image_path: str
+    processed_image_path: str
 
+@app.post("/wardrobe")
+async def save_wardrobe_item(request: SaveClothingRequest):
+    try:
+        item = create_clothing_item(
+            user_id=1,
+            name=request.name,
+            category=request.category,
+            subcategory=request.subcategory,
+            brand=request.brand,
+            color=request.color,
+            style=request.style,
+            material=request.material,
+            image_path=request.image_path,
+            processed_image_path=request.processed_image_path,
+        )
+
+        reset_generated_outfits()
+
+        return {
+            "success": True,
+            "item": item,
+        }
+
+    except Exception as e:
+        print(f"❌ Failed to save clothing: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+    
 @app.post("/process-clothing")
 async def process_clothing_route(
     file: UploadFile = File(...),

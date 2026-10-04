@@ -7,16 +7,46 @@ import 'package:http_parser/http_parser.dart';
 import '../models/clothing_item.dart';
 
 class ApiService {
-  // Physical Android phone:
+  // ========================================================
+  // BACKEND URL
+  // ========================================================
+
+  // Physical Android phone
   static const String baseUrl = 'http://192.168.1.58:8000';
 
-  // Android emulator:
-  // static const String baseUrl =
-  //     'http://10.0.2.2:8000';
+  // Android emulator
+  // static const String baseUrl = 'http://10.0.2.2:8000';
 
-  // iOS simulator:
-  // static const String baseUrl =
-  //     'http://127.0.0.1:8000';
+  // iOS simulator
+  // static const String baseUrl = 'http://127.0.0.1:8000';
+
+  // ========================================================
+  // IMAGE CONTENT TYPE
+  // ========================================================
+
+  static MediaType _getImageContentType(String path) {
+    final extension = path.split('.').last.toLowerCase();
+
+    switch (extension) {
+      case 'png':
+        return MediaType('image', 'png');
+
+      case 'webp':
+        return MediaType('image', 'webp');
+
+      case 'gif':
+        return MediaType('image', 'gif');
+
+      case 'heic':
+      case 'heif':
+        return MediaType('image', 'heic');
+
+      case 'jpg':
+      case 'jpeg':
+      default:
+        return MediaType('image', 'jpeg');
+    }
+  }
 
   // ========================================================
   // PROCESS CLOTHING
@@ -33,7 +63,11 @@ class ApiService {
 
     request.fields['category'] = category;
 
-    print('SENDING CATEGORY TO BACKEND: $category');
+    print('========================================');
+    print('SENDING CLOTHING TO BACKEND');
+    print('CATEGORY: $category');
+    print('IMAGE: ${image.path}');
+    print('========================================');
 
     request.files.add(
       await http.MultipartFile.fromPath(
@@ -47,13 +81,20 @@ class ApiService {
 
     final body = await response.stream.bytesToString();
 
+    print('BACKEND STATUS: ${response.statusCode}');
+
+    print('BACKEND RESPONSE: $body');
+
     if (response.statusCode != 200) {
       throw Exception('Backend error: $body');
     }
 
     final data = jsonDecode(body);
 
-    return ClothingItem.fromJson(data);
+    print('PROCESS CLOTHING RESPONSE: $data');
+    print('ITEM FROM RESPONSE: ${data['item']}');
+
+    return ClothingItem.fromJson(data['item']);
   }
 
   // ========================================================
@@ -64,7 +105,7 @@ class ApiService {
     final response = await http.get(Uri.parse('$baseUrl/wardrobe'));
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to load wardrobe.');
+      throw Exception('Failed to load wardrobe: ${response.body}');
     }
 
     final data = jsonDecode(response.body);
@@ -82,13 +123,9 @@ class ApiService {
     final response = await http.delete(Uri.parse('$baseUrl/wardrobe/$id'));
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to delete clothing.');
+      throw Exception('Failed to delete clothing: ${response.body}');
     }
   }
-
-  // ========================================================
-  // GENERATE OUTFIT
-  // ========================================================
 
   // ========================================================
   // GENERATE FIRST OUTFIT
@@ -127,34 +164,62 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  // ========================================================
+  // OUTFIT FEEDBACK
+  // ========================================================
 
-// ========================================================
-// OUTFIT FEEDBACK
-// ========================================================
-
-static Future<Map<String, dynamic>> sendOutfitFeedback({
-  required List<String> outfitKey,
-  required String feedback,
-}) async {
-  final response = await http.post(
-    Uri.parse('$baseUrl/outfit-feedback'),
-
-    headers: {
-      'Content-Type': 'application/json',
-    },
-
-    body: jsonEncode({
-      'outfit_key': outfitKey,
-      'feedback': feedback,
-    }),
-  );
-
-  if (response.statusCode != 200) {
-    throw Exception(
-      'Failed to save outfit feedback: ${response.body}',
+  static Future<Map<String, dynamic>> sendOutfitFeedback({
+    required List<String> outfitKey,
+    required String feedback,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/outfit-feedback'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'outfit_key': outfitKey, 'feedback': feedback}),
     );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to save outfit feedback: ${response.body}');
+    }
+
+    return jsonDecode(response.body);
   }
 
-  return jsonDecode(response.body);
-}
+  // ========================================================
+  // SAVE CLOTHING ITEM
+  // ========================================================
+
+  static Future<ClothingItem> saveClothingItem({
+    required ClothingItem item,
+    required String name,
+    required String brand,
+    required String category,
+    required String color,
+    required String style,
+    required String material,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/wardrobe'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name,
+        'category': category,
+        'subcategory': item.subcategory ?? 'unknown',
+        'brand': brand,
+        'color': color,
+        'style': style,
+        'material': material,
+        'image_path': item.imagePath,
+        'processed_image_path': item.processedImagePath,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Unable to save clothing: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+
+    return ClothingItem.fromJson(data['item']);
+  }
 }

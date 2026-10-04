@@ -146,7 +146,6 @@ def get_clothing_item(
 # -------------------------------------------------------------------
 # Process uploaded clothing
 # -------------------------------------------------------------------
-
 async def process_clothing(
     file: UploadFile,
 ) -> Dict:
@@ -207,6 +206,23 @@ async def process_clothing(
         original_path
     )
 
+    # AI analysis information remains available
+    # in the backend for recommendation/evaluation.
+    print(
+        f"✓ AI category: {analysis['category']} "
+        f"({analysis['category_confidence']:.3f})"
+    )
+
+    print(
+        f"✓ AI color: {analysis['color']} "
+        f"({analysis['color_confidence']:.3f})"
+    )
+
+    print(
+        f"✓ AI style: {analysis['style']} "
+        f"({analysis['style_confidence']:.3f})"
+    )
+
     # ---------------------------------------------------------------
     # Create clean processed image
     # ---------------------------------------------------------------
@@ -218,44 +234,55 @@ async def process_clothing(
 
     # ---------------------------------------------------------------
     # Build wardrobe item
+    #
+    # Only store user-facing wardrobe information here.
+    # AI confidence values and embeddings remain in `analysis`
+    # for backend AI/recommendation use.
     # ---------------------------------------------------------------
+
+    def generate_clothing_name(color: str, category: str) -> str:
+        category_names = {
+            "upper": "Top",
+            "lower": "Bottom",
+            "full": "Full Body",
+            "top": "Top",
+            "pants": "Pants",
+            "skirt": "Skirt",
+            "dress": "Dress",
+        }
+
+        display_category = category_names.get(
+            category.lower(),
+            category.title(),
+        )
+
+        return f"{color.title()} {display_category}"
 
     item = {
         "id": item_id,
 
-        "name": (
-            os.path.splitext(
-                original_name
-            )[0]
+         "name": generate_clothing_name(
+            analysis["color"],
+            analysis["category"],
         ),
 
         "category": analysis["category"],
+
+        "subcategory": "unknown",
+
+        "brand": "unknown",
 
         "color": analysis["color"],
 
         "style": analysis["style"],
 
-        "image_path": original_path,
+        "material": "unknown",
 
-        "processed_image_path": processed_path,
+        "image_path": f"/uploads/{filename}",
+
+        "processed_image_path": f"/processed/{processed_filename}",
 
         "original_filename": original_name,
-
-        "category_confidence": analysis[
-            "category_confidence"
-        ],
-
-        "color_confidence": analysis[
-            "color_confidence"
-        ],
-
-        "style_confidence": analysis[
-            "style_confidence"
-        ],
-
-        "visual_embedding": analysis[
-            "embedding"
-        ],
 
         "model_name": analysis[
             "model_name"
@@ -264,9 +291,17 @@ async def process_clothing(
         "created_at": datetime.now().isoformat(),
     }
 
+    # ---------------------------------------------------------------
+    # Temporary wardrobe storage
+    #
+    # This will later be replaced with MySQL.
+    # ---------------------------------------------------------------
+
     wardrobe = load_wardrobe()
 
-    wardrobe.append(item)
+    wardrobe.append(
+        item
+    )
 
     save_wardrobe(
         wardrobe
@@ -278,7 +313,6 @@ async def process_clothing(
     reset_generated_outfits()
 
     return item
-
 
 # -------------------------------------------------------------------
 # Delete clothing

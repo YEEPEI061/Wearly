@@ -1,11 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/services/api_service.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_page_header.dart';
+import 'package:frontend/models/clothing_item.dart';
+import 'dart:io';
 
 class ClothingDetailPage extends StatefulWidget {
-  const ClothingDetailPage({super.key});
+  final ClothingItem? item;
+  final bool isNewItem;
+  final File? previewImage;
+
+  const ClothingDetailPage({
+    super.key,
+    this.item,
+    this.isNewItem = false,
+    this.previewImage,
+  });
 
   @override
   State<ClothingDetailPage> createState() => _ClothingDetailPageState();
@@ -16,20 +28,394 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
   // ITEM DATA
   // ============================================================
 
-  final String _clothingImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDoXbYiKghvBHiIgDEgTS1gjFV1hsx_bE1-bwjRUMukeiWyHs5DlQvVpn_OyCLi6stpDNDhgmAam1QZLMuYRZpMKQScQ8aNUREa1mKJGf91fBhG9uU1oUPk9mZLC-13VVSN8wB2qmk_Dw2WvP82fgJHwmN-5RdY5jb_jigA_n1u_P8cL0b0aCahHjjs0R8qilBAEObe7nqVeEcq2L0PEXaPhSAQl_SV9-uGU0FZ3ml3A5Q9UjP1YAdZ';
+  String _brand = 'Unknown';
+  String _title = 'Clothing Item';
+  String _colorway = 'Unknown';
+  String _material = 'Unknown';
+  String _season = 'All Season';
 
-  String _brand = 'THE ROW';
-  String _title = 'Oversized Cashmere Turtleneck';
-  String _colorway = 'Camel Melange';
-  String _material = '100% Mongolian Cashmere';
-  String _season = "Fall / Winter '23";
+  String _category = 'Unknown';
+  String _style = 'Unknown';
 
-  final List<String> _tags = ['Minimalist', 'Monochrome', 'Luxury Basics'];
+  String? _processedImageUrl;
+
+  File? _localImage;
+
+  final List<String> _tags = [];
+
+  String _displayCategory(String category) {
+    switch (category.toLowerCase()) {
+      case 'upper':
+        return 'Top';
+      case 'lower':
+        return 'Bottom';
+      case 'full':
+        return 'Full Body';
+      case 'top':
+        return 'Top';
+      case 'pants':
+        return 'Bottom';
+      case 'skirt':
+        return 'Bottom';
+      case 'dress':
+        return 'Full Body';
+      default:
+        return category.isEmpty ? 'Unknown' : category;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    final item = widget.item;
+
+    if (item != null) {
+      _title = item.name;
+      _brand = item.brand ?? 'Unknown';
+      _colorway = item.color ?? 'Unknown';
+      _material = item.material ?? 'Unknown';
+      _category = item.category;
+      _style = item.style ?? 'Unknown';
+
+      if (item.processedImagePath != null &&
+          item.processedImagePath!.isNotEmpty) {
+        _processedImageUrl = '${ApiService.baseUrl}${item.processedImagePath}';
+      }
+
+      if (widget.previewImage != null) {
+        _localImage = widget.previewImage;
+      } else if (item.imagePath != null && item.imagePath!.isNotEmpty) {
+        _localImage = File(item.imagePath!);
+      }
+
+      if (_style != 'Unknown') {
+        _tags.add(_style);
+      }
+    }
+  }
 
   // ============================================================
   // ACTIONS
   // ============================================================
+
+  void _editCategory() {
+    final categories = [
+      {'value': 'upper', 'label': 'Top'},
+      {'value': 'lower', 'label': 'Bottom'},
+      {'value': 'full', 'label': 'Full Body'},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SELECT CATEGORY',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                ...categories.map(
+                  (category) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: const VisualDensity(vertical: -2),
+                    title: Text(
+                      category['label']!,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    trailing: _category == category['value']
+                        ? const Icon(Icons.check, color: AppColors.primary)
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _category = category['value']!;
+                      });
+
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _editColor() {
+    final colors = [
+      'black',
+      'white',
+      'light gray',
+      'dark gray',
+      'beige',
+      'brown',
+      'navy blue',
+      'blue',
+      'green',
+      'red',
+      'orange',
+      'yellow',
+      'pink',
+      'purple',
+      'multicolor',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SELECT COLOUR',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                SizedBox(
+                  height: 360,
+                  child: ListView.separated(
+                    itemCount: colors.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 0),
+                    itemBuilder: (context, index) {
+                      final color = colors[index];
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(
+                          _capitalizeWords(color),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        trailing: _colorway.toLowerCase() == color
+                            ? const Icon(Icons.check, color: AppColors.primary)
+                            : null,
+                        onTap: () {
+                          setState(() {
+                            _colorway = color;
+                          });
+
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _editStyle() {
+    final styles = [
+      'casual',
+      'smart casual',
+      'formal',
+      'sporty',
+      'streetwear',
+      'minimalist',
+      'elegant',
+      'vintage',
+      'preppy',
+      'relaxed',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SELECT STYLE',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                SizedBox(
+                  height: 360,
+                  child: ListView.separated(
+                    itemCount: styles.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 0),
+                    itemBuilder: (context, index) {
+                      final style = styles[index];
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(
+                          _capitalizeWords(style),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        trailing: _style.toLowerCase() == style
+                            ? const Icon(Icons.check, color: AppColors.primary)
+                            : null,
+                        onTap: () {
+                          setState(() {
+                            _style = style;
+                          });
+
+                          _tags.removeWhere(
+                            (tag) => styles.contains(tag.toLowerCase()),
+                          );
+
+                          if (!_tags.contains(style)) {
+                            _tags.add(style);
+                          }
+
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _editMaterial() {
+    final materials = [
+      'cotton',
+      'polyester',
+      'linen',
+      'wool',
+      'cashmere',
+      'denim',
+      'nylon',
+      'rayon',
+      'viscose',
+      'silk',
+      'leather',
+      'suede',
+      'acrylic',
+      'spandex / elastane',
+      'cotton blend',
+      'synthetic blend',
+      'other',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SELECT MATERIAL',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                SizedBox(
+                  height: 360,
+                  child: ListView.separated(
+                    itemCount: materials.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 0),
+                    itemBuilder: (context, index) {
+                      final material = materials[index];
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(
+                          _capitalizeWords(material),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        trailing: _material.toLowerCase() == material
+                            ? const Icon(Icons.check, color: AppColors.primary)
+                            : null,
+                        onTap: () {
+                          setState(() {
+                            _material = material;
+                          });
+
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+  }
 
   void _editText({
     required String title,
@@ -205,6 +591,72 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
   }
 
   // ============================================================
+  // HELPER
+  // ============================================================
+
+  String _capitalizeWords(String text) {
+    return text
+        .split(' ')
+        .map(
+          (word) =>
+              word.isEmpty ? word : word[0].toUpperCase() + word.substring(1),
+        )
+        .join(' ');
+  }
+
+  Color _colorForName(String colorName) {
+    switch (colorName.toLowerCase()) {
+      case 'black':
+        return Colors.black;
+
+      case 'white':
+        return Colors.white;
+
+      case 'light gray':
+        return Colors.grey.shade300;
+
+      case 'dark gray':
+        return Colors.grey.shade700;
+
+      case 'beige':
+        return const Color(0xFFD8C3A5);
+
+      case 'brown':
+        return Colors.brown;
+
+      case 'navy blue':
+        return const Color(0xFF1E3A5F);
+
+      case 'blue':
+        return Colors.blue;
+
+      case 'green':
+        return Colors.green;
+
+      case 'red':
+        return Colors.red;
+
+      case 'orange':
+        return Colors.orange;
+
+      case 'yellow':
+        return Colors.yellow;
+
+      case 'pink':
+        return Colors.pink;
+
+      case 'purple':
+        return Colors.purple;
+
+      case 'multicolor':
+        return Colors.grey;
+
+      default:
+        return AppColors.outlineVariant;
+    }
+  }
+
+  // ============================================================
   // BUILD
   // ============================================================
 
@@ -226,7 +678,10 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                     const SizedBox(height: 24),
                     _buildItemDetails(),
                     const SizedBox(height: 24),
-                    _buildDeleteButton(),
+                    if (widget.isNewItem)
+                      _buildSaveButton()
+                    else
+                      _buildDeleteButton(),
                   ],
                 ),
               ),
@@ -259,34 +714,37 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
       child: Column(
         children: [
           // Clothing image
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-            child: Container(
-              width: 256,
-              height: 320,
-              color: AppColors.surfaceContainerMedium,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Image.network(
-                      _clothingImage,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) {
-                        return const Center(
-                          child: Icon(
-                            Icons.checkroom_outlined,
-                            size: 64,
-                            color: AppColors.outline,
-                          ),
-                        );
-                      },
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+            ),
+            child: _processedImageUrl != null
+                ? Image.network(
+                    _processedImageUrl!,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) {
+                      return _localImage != null
+                          ? Image.file(_localImage!, fit: BoxFit.contain)
+                          : const Center(
+                              child: Icon(
+                                Icons.checkroom_outlined,
+                                size: 64,
+                                color: AppColors.outline,
+                              ),
+                            );
+                    },
+                  )
+                : _localImage != null
+                ? Image.file(_localImage!, fit: BoxFit.contain)
+                : const Center(
+                    child: Icon(
+                      Icons.checkroom_outlined,
+                      size: 64,
+                      color: AppColors.outline,
                     ),
                   ),
-                ],
-              ),
-            ),
           ),
-
           const SizedBox(height: 20),
 
           // Auto-save status
@@ -423,12 +881,22 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'ITEM DETAILS',
-                style: AppTextStyles.labelMedium.copyWith(
-                  color: AppColors.primary,
-                  letterSpacing: 1.5,
-                ),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.auto_awesome,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'ITEM DETAILS',
+                    style: AppTextStyles.labelMedium.copyWith(
+                      color: AppColors.primary,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
               ),
               Row(
                 children: [
@@ -456,21 +924,56 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
 
           const SizedBox(height: 16),
 
-          // Colorway
+          // ========================================================
+          // CATEGORY
+          // ========================================================
           _buildDetailRow(
-            label: 'Colorway',
+            label: 'Category',
             child: GestureDetector(
-              onTap: () {
-                _editText(
-                  title: 'Edit Colorway',
-                  currentValue: _colorway,
-                  onSave: (value) {
-                    setState(() {
-                      _colorway = value;
-                    });
-                  },
-                );
-              },
+              onTap: _editCategory,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                  border: Border.all(
+                    color: AppColors.outlineVariant.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _displayCategory(_category),
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.expand_more,
+                      size: 16,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ========================================================
+          // COLOUR
+          // ========================================================
+          _buildDetailRow(
+            label: 'Colour',
+            child: GestureDetector(
+              onTap: _editColor,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -490,16 +993,16 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                       width: 14,
                       height: 14,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFB89774),
+                        color: _colorForName(_colorway),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.outlineVariant.withOpacity(0.4),
+                          color: AppColors.outlineVariant.withOpacity(0.6),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      _colorway,
+                      _capitalizeWords(_colorway),
                       style: AppTextStyles.bodyMedium.copyWith(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w600,
@@ -519,25 +1022,16 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
 
           const SizedBox(height: 16),
 
-          // Material
+          // ========================================================
+          // STYLE
+          // ========================================================
           _buildDetailRow(
-            label: 'Material',
+            label: 'Style',
             child: GestureDetector(
-              onTap: () {
-                _editText(
-                  title: 'Edit Material',
-                  currentValue: _material,
-                  onSave: (value) {
-                    setState(() {
-                      _material = value;
-                    });
-                  },
-                );
-              },
+              onTap: _editStyle,
               child: Container(
-                constraints: const BoxConstraints(maxWidth: 220),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
+                  horizontal: 12,
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
@@ -550,20 +1044,17 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Flexible(
-                      child: Text(
-                        _material,
-                        textAlign: TextAlign.right,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    Text(
+                      _capitalizeWords(_style),
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 8),
                     const Icon(
-                      Icons.edit_outlined,
-                      size: 15,
+                      Icons.expand_more,
+                      size: 16,
                       color: AppColors.onSurfaceVariant,
                     ),
                   ],
@@ -574,7 +1065,52 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
 
           const SizedBox(height: 16),
 
-          // Season
+          // ========================================================
+          // MATERIAL
+          // ========================================================
+          _buildDetailRow(
+            label: 'Material',
+            child: GestureDetector(
+              onTap: _editMaterial,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                  border: Border.all(
+                    color: AppColors.outlineVariant.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _capitalizeWords(_material),
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.expand_more,
+                      size: 16,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ========================================================
+          // SEASON
+          // ========================================================
           _buildDetailRow(
             label: 'Season',
             child: GestureDetector(
@@ -615,7 +1151,9 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
 
           const SizedBox(height: 20),
 
-          // Tags
+          // ========================================================
+          // TAGS
+          // ========================================================
           Container(
             padding: const EdgeInsets.only(top: 16),
             decoration: BoxDecoration(
@@ -792,6 +1330,7 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                 ...seasons.map(
                   (season) => ListTile(
                     contentPadding: EdgeInsets.zero,
+                    visualDensity: const VisualDensity(vertical: -2),
                     title: Text(
                       season,
                       style: AppTextStyles.bodyMedium.copyWith(
@@ -841,5 +1380,73 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
         ),
       ),
     );
+  }
+
+  // ============================================================
+  // SAVE
+  // ============================================================
+
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton.icon(
+        onPressed: _saveItem,
+        icon: const Icon(Icons.check, size: 20),
+        label: Text(
+          'SAVE TO WARDROBE',
+          style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.white,
+            letterSpacing: 1.0,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveItem() async {
+    final item = widget.item;
+
+    if (item == null) {
+      _showError('Unable to save this clothing item.');
+      return;
+    }
+
+    try {
+      await ApiService.saveClothingItem(
+        item: item,
+        name: _title,
+        brand: _brand,
+        category: _category,
+        color: _colorway,
+        style: _style,
+        material: _material,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Clothing saved to your wardrobe.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+
+      _showError(e.toString().replaceFirst('Exception: ', ''));
+    }
   }
 }
