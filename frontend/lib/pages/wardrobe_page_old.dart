@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/clothing_item.dart';
 import '../services/api_service.dart';
-import 'add_clothing_page_old.dart';
+// import 'add_clothing_page_old.dart';
 import 'outfit_page.dart';
 
 class WardrobePage extends StatefulWidget {
@@ -57,10 +57,10 @@ class _WardrobePageState extends State<WardrobePage> {
   // ========================================================
 
   Future<void> addClothing() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AddClothingPage()),
-    );
+    // await Navigator.push(
+    //   context,
+    //   MaterialPageRoute(builder: (_) => const AddClothingPage()),
+    // );
 
     loadWardrobe();
   }
@@ -119,10 +119,10 @@ class _WardrobePageState extends State<WardrobePage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           // Open Add Clothing page
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddClothingPage()),
-          );
+          // await Navigator.push(
+          //   context,
+          //   MaterialPageRoute(builder: (context) => const AddClothingPage()),
+          // );
 
           // Refresh wardrobe after coming back
           loadWardrobe();

@@ -54,20 +54,19 @@ class ApiService {
 
   static Future<ClothingItem> processClothing({
     required File image,
-    required String category,
+    required String selectedCategory,
   }) async {
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$baseUrl/process-clothing'),
     );
 
-    request.fields['category'] = category;
-
     print('========================================');
     print('SENDING CLOTHING TO BACKEND');
-    print('CATEGORY: $category');
     print('IMAGE: ${image.path}');
     print('========================================');
+
+    request.fields['selected_category'] = selectedCategory;
 
     request.files.add(
       await http.MultipartFile.fromPath(
@@ -95,6 +94,47 @@ class ApiService {
     print('ITEM FROM RESPONSE: ${data['item']}');
 
     return ClothingItem.fromJson(data['item']);
+  }
+
+  // ========================================================
+  // DETECT CLOTHING CATEGORY
+  // ========================================================
+
+  static Future<String> detectClothingCategory({required File image}) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/detect-category'),
+    );
+
+    print('========================================');
+    print('DETECTING CLOTHING CATEGORY');
+    print('IMAGE: ${image.path}');
+    print('========================================');
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file',
+        image.path,
+        contentType: MediaType('image', 'jpeg'),
+      ),
+    );
+
+    final response = await request.send();
+
+    final body = await response.stream.bytesToString();
+
+    print('CATEGORY STATUS: ${response.statusCode}');
+    print('CATEGORY RESPONSE: $body');
+
+    if (response.statusCode != 200) {
+      throw Exception('Category detection error: $body');
+    }
+
+    final data = jsonDecode(body);
+
+    print('DETECTED CATEGORY: ${data['category']}');
+
+    return data['category'] as String;
   }
 
   // ========================================================

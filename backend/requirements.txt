@@ -4,3 +4,7 @@ python-multipart
 pillow
 rembg
 onnxruntime
+diffusers
+transformers
+accelerate
+safetensors

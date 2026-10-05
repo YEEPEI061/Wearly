@@ -23,6 +23,7 @@ class _AddClothingPageState extends State<AddClothingPage> {
 
   bool _flashOn = false;
   bool _isProcessing = false;
+  bool _isDetectingCategory = false;
 
   File? _selectedImage;
   // ClothingItem? _aiResult;
@@ -31,7 +32,6 @@ class _AddClothingPageState extends State<AddClothingPage> {
   // These now act as real local recent scans.
   final List<File> _recentScans = [];
 
-  // Default category sent to the backend.
   String _selectedCategory = 'upper';
 
   // ============================================================
@@ -49,9 +49,14 @@ class _AddClothingPageState extends State<AddClothingPage> {
 
       if (image == null) return;
 
+      final File selectedFile = File(image.path);
+
       setState(() {
-        _selectedImage = File(image.path);
+        _selectedImage = selectedFile;
       });
+      _addToRecentScans(selectedFile);
+
+      await _detectCategory(selectedFile);
     } catch (e) {
       _showError('Unable to open your photo library.');
     }
@@ -68,12 +73,32 @@ class _AddClothingPageState extends State<AddClothingPage> {
 
       if (image == null) return;
 
+      final File selectedFile = File(image.path);
+
       setState(() {
-        _selectedImage = File(image.path);
+        _selectedImage = selectedFile;
       });
+      _addToRecentScans(selectedFile);
+
+      await _detectCategory(selectedFile);
     } catch (e) {
       _showError('Unable to open the camera.');
     }
+  }
+
+  void _addToRecentScans(File image) {
+    setState(() {
+      // Remove the same image if it already exists.
+      _recentScans.removeWhere((file) => file.path == image.path);
+
+      // Add newest scan to the beginning.
+      _recentScans.insert(0, image);
+
+      // Keep only the latest 6 scans.
+      if (_recentScans.length > 6) {
+        _recentScans.removeLast();
+      }
+    });
   }
 
   void _toggleFlash() {
@@ -96,6 +121,43 @@ class _AddClothingPageState extends State<AddClothingPage> {
   }
 
   // ============================================================
+  // AUTOMATIC CATEGORY DETECTION
+  // ============================================================
+
+  Future<void> _detectCategory(File image) async {
+    if (_isProcessing) return;
+
+    setState(() {
+      _isDetectingCategory = true;
+    });
+
+    try {
+      final String category = await ApiService.detectClothingCategory(
+        image: image,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedCategory = category;
+        _isDetectingCategory = false;
+      });
+
+      print('✓ AI detected category: $category');
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isDetectingCategory = false;
+      });
+
+      print('⚠ Category detection failed: $e');
+
+      // Keep current category if detection fails.
+    }
+  }
+
+  // ============================================================
   // AI ANALYSIS
   // ============================================================
 
@@ -112,7 +174,7 @@ class _AddClothingPageState extends State<AddClothingPage> {
     try {
       final ClothingItem result = await ApiService.processClothing(
         image: _selectedImage!,
-        category: _selectedCategory,
+        selectedCategory: _selectedCategory,
       );
 
       if (!mounted) return;
@@ -162,40 +224,28 @@ class _AddClothingPageState extends State<AddClothingPage> {
   }
 
   // ============================================================
-  // CATEGORY
-  // ============================================================
-
-  void _selectCategory(String category) {
-    if (_isProcessing) return;
-
-    setState(() {
-      _selectedCategory = category;
-    });
-  }
-
-  // ============================================================
   // RECENT SCANS
   // ============================================================
 
-  void _openRecentScan(int index) {
-    if (index < 0 || index >= _recentScans.length) return;
+  Future<void> _openRecentScan(int index) async {
+    if (_isProcessing) return;
+
+    if (index < 0 || index >= _recentScans.length) {
+      return;
+    }
+
+    final File selectedFile = _recentScans[index];
 
     setState(() {
-      _selectedImage = _recentScans[index];
+      _selectedImage = selectedFile;
     });
+
+    await _detectCategory(selectedFile);
   }
 
   // ============================================================
   // MESSAGES
   // ============================================================
-
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-      );
-  }
 
   void _showError(String message) {
     ScaffoldMessenger.of(context)
@@ -338,9 +388,12 @@ class _AddClothingPageState extends State<AddClothingPage> {
             // ====================================================
             Positioned.fill(
               child: _selectedImage != null
-                  ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                  ? Container(
+                      color: AppColors.secondary,
+                      child: Image.file(_selectedImage!, fit: BoxFit.contain),
+                    )
                   : Container(
-                      color: AppColors.primaryContainer,
+                      color: AppColors.secondary,
                       child: const Center(
                         child: Icon(
                           Icons.checkroom_outlined,
@@ -506,6 +559,20 @@ class _AddClothingPageState extends State<AddClothingPage> {
   }
 
   // ============================================================
+  // CATEGORY
+  // ============================================================
+
+  void _selectCategory(String category) {
+    if (_isProcessing || _isDetectingCategory) {
+      return;
+    }
+
+    setState(() {
+      _selectedCategory = category;
+    });
+  }
+
+  // ============================================================
   // CATEGORY SELECTOR
   // ============================================================
 
@@ -513,12 +580,28 @@ class _AddClothingPageState extends State<AddClothingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'CLOTHING TYPE',
-          style: AppTextStyles.labelMedium.copyWith(
-            color: AppColors.primary,
-            letterSpacing: 1.0,
-          ),
+        Row(
+          children: [
+            Text(
+              'CLOTHING TYPE',
+              style: AppTextStyles.labelMedium.copyWith(
+                color: AppColors.primary,
+                letterSpacing: 1.0,
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            if (_isDetectingCategory)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              ),
+          ],
         ),
 
         const SizedBox(height: 10),
@@ -526,9 +609,13 @@ class _AddClothingPageState extends State<AddClothingPage> {
         Row(
           children: [
             _buildCategoryButton('upper', 'Upper'),
+
             const SizedBox(width: 8),
+
             _buildCategoryButton('lower', 'Lower'),
+
             const SizedBox(width: 8),
+
             _buildCategoryButton('full', 'Full'),
           ],
         ),
@@ -536,7 +623,9 @@ class _AddClothingPageState extends State<AddClothingPage> {
         const SizedBox(height: 8),
 
         Text(
-          'Choose the garment type for more accurate AI analysis.',
+          _isDetectingCategory
+              ? 'AI is detecting the clothing type...'
+              : 'AI detected the clothing type. You can change it if needed.',
           style: AppTextStyles.bodySmall.copyWith(
             color: AppColors.onSurfaceVariant,
           ),
@@ -796,29 +885,5 @@ class _AddClothingPageState extends State<AddClothingPage> {
         child: const Icon(Icons.add, size: 24, color: AppColors.secondary),
       ),
     );
-  }
-
-  // ============================================================
-  // HELPERS
-  // ============================================================
-
-  String _displayCategory(String? category) {
-    switch (category?.toLowerCase()) {
-      case 'upper':
-      case 'top':
-        return 'Upper';
-
-      case 'lower':
-      case 'pants':
-      case 'skirt':
-        return 'Lower';
-
-      case 'full':
-      case 'dress':
-        return 'Full';
-
-      default:
-        return category ?? 'Unknown';
-    }
   }
 }

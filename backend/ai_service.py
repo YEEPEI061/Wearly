@@ -1,7 +1,8 @@
 import os
-import json
 import math
 from typing import Dict, List, Optional, Tuple
+from PIL import Image, ImageFilter
+from diffusers import StableDiffusionInpaintPipeline
 
 import numpy as np
 from PIL import Image
@@ -12,13 +13,13 @@ import torch
 # Torch / torchvision compatibility patch
 # -------------------------------------------------------------------
 
-try:
-    lib = torch.library.Library("torchvision", "DEF")
-    lib.define(
-        "nms(Tensor boxes, Tensor scores, float iou_threshold) -> Tensor"
-    )
-except Exception:
-    pass
+# try:
+#     lib = torch.library.Library("torchvision", "DEF")
+#     lib.define(
+#         "nms(Tensor boxes, Tensor scores, float iou_threshold) -> Tensor"
+#     )
+# except Exception:
+#     pass
 
 from transformers import (
     CLIPModel,
@@ -91,6 +92,8 @@ CATEGORY_MAP = {
     "jumpsuit": "full",
 }
 
+ENABLE_CLOTHING_INPAINTING = False
+
 
 # -------------------------------------------------------------------
 # Global models
@@ -101,6 +104,7 @@ _clip_processor = None
 _clip_model = None
 _fashion_processor = None
 _fashion_model = None
+_inpaint_pipeline = None
 
 
 # -------------------------------------------------------------------
@@ -120,7 +124,11 @@ def load_models():
             _parser = FashnHumanParser()
             print("✓ FASHN Human Parser loaded")
         except Exception as e:
-            print(f"⚠ FASHN parser unavailable: {e}")
+            import traceback
+
+            print("⚠ FASHN parser unavailable:")
+            traceback.print_exc()
+
             _parser = None
 
     if _clip_model is None:
@@ -195,7 +203,156 @@ def cosine_similarity(a, b) -> float:
 
     return float(np.dot(a, b) / denominator)
 
+# -------------------------------------------------------------------
+# AI INPANTING
+# -------------------------------------------------------------------
+def inpaint_clothing_occlusion(
+    image: Image.Image,
+    occlusion_mask,
+) -> Image.Image:
+    """
+    Reconstruct clothing regions that are potentially
+    hidden by hair.
 
+    White areas in occlusion_mask are reconstructed.
+    Black areas are preserved.
+    """
+
+    global _inpaint_pipeline
+
+    try:
+        # ---------------------------------------------------------
+        # Load inpainting model only when needed
+        # ---------------------------------------------------------
+
+        if _inpaint_pipeline is None:
+
+            print(
+                "Loading Stable Diffusion Inpainting model..."
+            )
+
+            _inpaint_pipeline = (
+                StableDiffusionInpaintPipeline.from_pretrained(
+                    "stable-diffusion-v1-5/stable-diffusion-inpainting",
+                    torch_dtype=torch.float32,
+                )
+            )
+
+            # CPU mode for Mac compatibility.
+            _inpaint_pipeline = (
+                _inpaint_pipeline.to("cpu")
+            )
+
+            # Reduce memory usage.
+            _inpaint_pipeline.enable_attention_slicing()
+
+            print(
+                "✓ Inpainting model loaded"
+            )
+
+        # ---------------------------------------------------------
+        # Prepare image
+        # ---------------------------------------------------------
+
+        original_size = image.size
+
+        image = image.convert("RGB")
+
+        # Stable Diffusion works much better around 512x512.
+        work_size = (512, 512)
+
+        image_small = image.resize(
+            work_size,
+            Image.Resampling.LANCZOS,
+        )
+
+        # ---------------------------------------------------------
+        # Prepare occlusion mask
+        # ---------------------------------------------------------
+
+        mask_image = Image.fromarray(
+            (
+                occlusion_mask.astype("uint8")
+                * 255
+            )
+        ).convert("L")
+
+        mask_image = mask_image.resize(
+            work_size,
+            Image.Resampling.NEAREST,
+        )
+
+        # Slightly expand the reconstruction region.
+        mask_image = mask_image.filter(
+            ImageFilter.MaxFilter(15)
+        )
+
+        # ---------------------------------------------------------
+        # Prompt
+        # ---------------------------------------------------------
+
+        prompt = (
+            "the same shirt continuing naturally behind the hair, "
+            "matching the visible shirt exactly, "
+            "same dark gray color, same fabric texture, "
+            "same clothing shape and folds"
+        )
+
+        negative_prompt = (
+            "new clothing, different shirt, different color, "
+            "person, face, skin, arms, hands, hair, "
+            "body, extra objects, text, logo, watermark"
+        )
+
+        # ---------------------------------------------------------
+        # Run inpainting
+        # ---------------------------------------------------------
+
+        print(
+            "✓ Starting AI clothing reconstruction..."
+        )
+
+        result = _inpaint_pipeline(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            image=image_small,
+            mask_image=mask_image,
+            num_inference_steps=10,
+            guidance_scale=5.0,
+            strength=0.35,
+        )
+
+        reconstructed = result.images[0]
+
+        # ---------------------------------------------------------
+        # Restore original image size
+        # ---------------------------------------------------------
+
+        reconstructed = reconstructed.resize(
+            original_size,
+            Image.Resampling.LANCZOS,
+        )
+
+        print(
+            "✓ AI clothing reconstruction complete"
+        )
+
+        return reconstructed
+
+    except Exception as e:
+
+        import traceback
+
+        print(
+            "⚠ AI clothing reconstruction failed:"
+        )
+
+        traceback.print_exc()
+
+        # Return original image if reconstruction fails.
+        return image
+
+    
 # -------------------------------------------------------------------
 # FASHN clothing segmentation
 # -------------------------------------------------------------------
@@ -219,6 +376,7 @@ def detect_clothing(image_path: str) -> Dict:
             "confidence": 0.0,
             "bbox": None,
             "mask": None,
+            "hair_mask": None,
         }
 
     try:
@@ -233,6 +391,26 @@ def detect_clothing(image_path: str) -> Dict:
         # -----------------------------------------------------------
 
         labels = _parser.get_labels()
+
+                # -----------------------------------------------------------
+        # Create hair mask
+        # -----------------------------------------------------------
+
+        hair_mask = None
+
+        hair_label_id = next(
+            (
+                label_id
+                for label_id, label_name in labels.items()
+                if str(label_name).lower() == "hair"
+            ),
+            None,
+        )
+
+        if hair_label_id is not None:
+            hair_mask = (
+                segmentation == hair_label_id
+            )
 
         # -----------------------------------------------------------
         # Count pixels for each clothing label
@@ -272,6 +450,7 @@ def detect_clothing(image_path: str) -> Dict:
                 "confidence": 0.0,
                 "bbox": None,
                 "mask": None,
+                "hair_mask": hair_mask,
             }
 
         # -----------------------------------------------------------
@@ -344,20 +523,332 @@ def detect_clothing(image_path: str) -> Dict:
             "confidence": confidence,
             "bbox": bbox,
             "mask": mask,
+            "hair_mask": hair_mask,
         }
 
     except Exception as e:
+        import traceback
+
         print(
-            f"⚠ Clothing detection failed: {e}"
+            "⚠ Clothing detection failed:"
         )
+
+        traceback.print_exc()
 
         return {
             "category": "top",
             "confidence": 0.0,
             "bbox": None,
             "mask": None,
+            "hair_mask": None,
+        }
+
+
+def detect_clothing_occlusion(
+    image_path: str,
+) -> Dict:
+    """
+    Detect possible hair-over-clothing occlusion.
+
+    FASHN provides:
+    - visible clothing mask
+    - hair mask
+
+    Hair close to the visible clothing boundary
+    is considered a possible occlusion region.
+    """
+
+    image = load_image(
+        image_path
+    )
+
+    if _parser is None:
+        print(
+            "⚠ FASHN parser unavailable."
+        )
+
+        return {
+            "clothing_mask": None,
+            "hair_mask": None,
+            "occlusion_mask": None,
+            "bbox": None,
+        }
+
+    try:
+
+        # ---------------------------------------------------------
+        # Run FASHN once
+        # ---------------------------------------------------------
+
+        segmentation = _parser.predict(
+            image
+        )
+
+        labels = _parser.get_labels()
+
+        # ---------------------------------------------------------
+        # Find label IDs
+        # ---------------------------------------------------------
+
+        clothing_label_ids = {}
+
+        for label_id, label_name in labels.items():
+
+            label_name = str(
+                label_name
+            ).lower()
+
+            if label_name in {
+                "top",
+                "pants",
+                "skirt",
+                "dress",
+            }:
+
+                clothing_label_ids[
+                    label_name
+                ] = label_id
+
+        hair_label_id = next(
+            (
+                label_id
+                for label_id, label_name
+                in labels.items()
+                if str(
+                    label_name
+                ).lower()
+                == "hair"
+            ),
+            None,
+        )
+
+        # ---------------------------------------------------------
+        # Build clothing masks
+        # ---------------------------------------------------------
+
+        clothing_masks = {}
+
+        for category, label_id in (
+            clothing_label_ids.items()
+        ):
+
+            mask = (
+                segmentation
+                == label_id
+            )
+
+            if np.any(mask):
+
+                clothing_masks[
+                    category
+                ] = mask
+
+        if not clothing_masks:
+
+            print(
+                "⚠ No clothing detected."
+            )
+
+            return {
+                "clothing_mask": None,
+                "hair_mask": None,
+                "occlusion_mask": None,
+                "bbox": None,
+            }
+
+        # ---------------------------------------------------------
+        # Select largest clothing region
+        # ---------------------------------------------------------
+
+        category = max(
+            clothing_masks,
+            key=lambda name:
+                int(
+                    clothing_masks[
+                        name
+                    ].sum()
+                ),
+        )
+
+        clothing_mask = (
+            clothing_masks[
+                category
+            ]
+        )
+
+        # ---------------------------------------------------------
+        # Hair mask
+        # ---------------------------------------------------------
+
+        if hair_label_id is not None:
+
+            hair_mask = (
+                segmentation
+                == hair_label_id
+            )
+
+        else:
+
+            hair_mask = np.zeros(
+                segmentation.shape,
+                dtype=bool,
+            )
+
+        # ---------------------------------------------------------
+        # Clothing bounding box
+        # ---------------------------------------------------------
+
+        ys, xs = np.where(
+            clothing_mask
+        )
+
+        if len(xs) == 0:
+
+            bbox = None
+
+        else:
+
+            bbox = [
+                int(xs.min()),
+                int(ys.min()),
+                int(xs.max()) + 1,
+                int(ys.max()) + 1,
+            ]
+
+        # ---------------------------------------------------------
+        # Expand clothing mask
+        # ---------------------------------------------------------
+
+        x1, y1, x2, y2 = bbox
+
+        bbox_width = max(
+            1,
+            x2 - x1,
+        )
+
+        bbox_height = max(
+            1,
+            y2 - y1,
+        )
+
+        dilation_size = max(
+            11,
+            int(
+                min(
+                    bbox_width,
+                    bbox_height,
+                )
+                * 0.05
+            ),
+        )
+
+        dilation_size = min(
+            dilation_size,
+            51,
+        )
+
+        if dilation_size % 2 == 0:
+            dilation_size += 1
+
+        clothing_image = (
+            Image.fromarray(
+                (
+                    clothing_mask.astype(
+                        "uint8"
+                    )
+                    * 255
+                )
+            ).convert("L")
+        )
+
+        expanded_clothing = (
+            clothing_image.filter(
+                ImageFilter.MaxFilter(
+                    dilation_size
+                )
+            )
+        )
+
+        expanded_clothing_mask = (
+            np.array(
+                expanded_clothing
+            )
+            > 0
+        )
+
+        # ---------------------------------------------------------
+        # Hair overlapping / touching clothing
+        # ---------------------------------------------------------
+
+        occlusion_mask = (
+            hair_mask
+            & expanded_clothing_mask
+        )
+
+        # ---------------------------------------------------------
+        # Remove tiny regions
+        # ---------------------------------------------------------
+
+        occlusion_pixels = int(
+            occlusion_mask.sum()
+        )
+
+        if occlusion_pixels < 50:
+
+            occlusion_mask = np.zeros(
+                segmentation.shape,
+                dtype=bool,
+            )
+
+        print(
+            f"✓ FASHN clothing: "
+            f"{category}"
+        )
+
+        print(
+            "✓ Clothing pixels:",
+            int(
+                clothing_mask.sum()
+            ),
+        )
+
+        print(
+            "✓ Hair pixels:",
+            int(
+                hair_mask.sum()
+            ),
+        )
+
+        print(
+            "✓ Occlusion pixels:",
+            int(
+                occlusion_mask.sum()
+            ),
+        )
+
+        return {
+            "clothing_mask": clothing_mask,
+            "hair_mask": hair_mask,
+            "occlusion_mask": occlusion_mask,
+            "bbox": bbox,
+            "category": category,
+        }
+
+    except Exception as e:
+
+        import traceback
+
+        traceback.print_exc()
+
+        return {
+            "clothing_mask": None,
+            "hair_mask": None,
+            "occlusion_mask": None,
+            "bbox": None,
         }
     
+
+
 # -------------------------------------------------------------------
 # Clothing image processing
 # -------------------------------------------------------------------
@@ -392,73 +883,304 @@ def create_processed_image(
     output_path: str,
 ) -> Dict:
 
-    image = load_image(image_path)
-
-    detection = detect_clothing(image_path)
-
-    bbox = detection.get("bbox")
-    mask = detection.get("mask")
+    image = load_image(
+        image_path
+    )
 
     # ---------------------------------------------------------------
-    # Extract clothing using segmentation mask
+    # Detect clothing + possible hair occlusion
+    # ---------------------------------------------------------------
+
+    detection = detect_clothing_occlusion(
+        image_path
+    )
+
+    bbox = detection.get(
+        "bbox"
+    )
+
+    mask = detection.get(
+        "clothing_mask"
+    )
+
+    occlusion_mask = detection.get(
+        "occlusion_mask"
+    )
+
+        # ---------------------------------------------------------------
+    # AI reconstruction
+    # ---------------------------------------------------------------
+
+    if (
+        ENABLE_CLOTHING_INPAINTING
+        and occlusion_mask is not None
+    ):
+
+        occlusion_pixels = int(
+            occlusion_mask.sum()
+        )
+
+        print(
+            f"✓ Possible hair occlusion: "
+            f"{occlusion_pixels} pixels"
+        )
+
+        if occlusion_pixels > 50:
+
+            print(
+                "→ Starting clothing reconstruction..."
+            )
+
+            reconstructed_image = (
+                inpaint_clothing_occlusion(
+                    image,
+                    occlusion_mask,
+                )
+            )
+
+            reconstructed_path = (
+                os.path.splitext(
+                    image_path
+                )[0]
+                + "_reconstructed.png"
+            )
+
+            reconstructed_image.save(
+                reconstructed_path
+            )
+
+            print(
+                "✓ Reconstructed image saved"
+            )
+
+            # -------------------------------------------------------
+            # Run FASHN AGAIN
+            # -------------------------------------------------------
+
+            reconstructed_mask = None
+            reconstructed_bbox = None
+            reconstructed_category = None
+
+            try:
+
+                reconstructed_image = load_image(
+                    reconstructed_path
+                )
+
+                reconstructed_segmentation = (
+                    _parser.predict(
+                        reconstructed_image
+                    )
+                )
+
+                reconstructed_labels = (
+                    _parser.get_labels()
+                )
+
+                clothing_label_ids = {}
+
+                for label_id, label_name in (
+                    reconstructed_labels.items()
+                ):
+
+                    label_name = str(
+                        label_name
+                    ).lower()
+
+                    if label_name in {
+                        "top",
+                        "pants",
+                        "skirt",
+                        "dress",
+                    }:
+
+                        clothing_label_ids[
+                            label_name
+                        ] = label_id
+
+                reconstructed_counts = {}
+
+                for category, label_id in (
+                    clothing_label_ids.items()
+                ):
+
+                    count = int(
+                        np.sum(
+                            reconstructed_segmentation
+                            == label_id
+                        )
+                    )
+
+                    if count > 0:
+
+                        reconstructed_counts[
+                            category
+                        ] = count
+
+                print(
+                    "✓ Reconstructed FASHN labels:",
+                    reconstructed_counts,
+                )
+
+                # ---------------------------------------------------
+                # Successful re-detection
+                # ---------------------------------------------------
+
+                if reconstructed_counts:
+
+                    reconstructed_category = max(
+                        reconstructed_counts,
+                        key=reconstructed_counts.get,
+                    )
+
+                    reconstructed_label_id = (
+                        clothing_label_ids[
+                            reconstructed_category
+                        ]
+                    )
+
+                    reconstructed_mask = (
+                        reconstructed_segmentation
+                        == reconstructed_label_id
+                    )
+
+                    ys, xs = np.where(
+                        reconstructed_mask
+                    )
+
+                    if len(xs) > 0:
+
+                        reconstructed_bbox = [
+                            int(xs.min()),
+                            int(ys.min()),
+                            int(xs.max()) + 1,
+                            int(ys.max()) + 1,
+                        ]
+
+                    print(
+                        f"✓ FASHN re-detected: "
+                        f"{reconstructed_category}"
+                    )
+
+                    print(
+                        f"✓ Reconstructed clothing pixels: "
+                        f"{int(reconstructed_mask.sum())}"
+                    )
+
+                else:
+
+                    print(
+                        "⚠ FASHN found no clothing "
+                        "in reconstructed image."
+                    )
+
+            except Exception as e:
+
+                import traceback
+
+                print(
+                    "⚠ FASHN reconstruction analysis failed:"
+                )
+
+                traceback.print_exc()
+
+            # -------------------------------------------------------
+            # Only use reconstruction if FASHN accepted it
+            # -------------------------------------------------------
+
+            if reconstructed_mask is not None:
+
+                print(
+                    "✓ FASHN re-segmentation successful"
+                )
+
+                image = reconstructed_image
+
+                mask = reconstructed_mask
+
+                bbox = reconstructed_bbox
+
+            else:
+
+                print(
+                    "⚠ Keeping original clothing "
+                    "segmentation."
+                )
+
+        else:
+
+            print(
+                "✓ No significant occlusion detected."
+            )
+
+    # ---------------------------------------------------------------
+    # Extract clothing using final FASHN mask
     # ---------------------------------------------------------------
 
     if mask is not None:
+
         try:
-            # Convert FASHN mask to PIL grayscale mask.
+
             mask_image = Image.fromarray(
-                (mask.astype("uint8") * 255)
+                (
+                    mask.astype("uint8")
+                    * 255
+                )
             ).convert("L")
 
-            # Make sure mask matches original image size.
+            mask_image = mask_image.filter(
+                ImageFilter.MaxFilter(9)
+            )
+
             if mask_image.size != image.size:
+
                 mask_image = mask_image.resize(
                     image.size,
                     Image.Resampling.NEAREST,
                 )
 
-            # Convert original image to RGBA.
-            image_rgba = image.convert("RGBA")
+            image_rgba = image.convert(
+                "RGBA"
+            )
 
-            # Create transparent image.
             clothing = Image.new(
                 "RGBA",
                 image_rgba.size,
                 (0, 0, 0, 0),
             )
 
-            # Keep only the detected clothing.
             clothing.paste(
                 image_rgba,
                 (0, 0),
                 mask_image,
             )
 
-            # Find actual visible clothing area.
-            clothing_bbox = clothing.getbbox()
+            clothing_bbox = (
+                clothing.getbbox()
+            )
 
             if clothing_bbox:
+
                 clothing = clothing.crop(
                     clothing_bbox
                 )
+
             else:
+
                 clothing = image_rgba
 
         except Exception as e:
+
             print(
                 f"⚠️ Mask processing failed: {e}"
             )
 
-            # Fallback to bounding-box crop.
             clothing = _crop_from_bbox(
                 image,
                 bbox,
             )
 
     else:
-        # -----------------------------------------------------------
-        # Fallback if segmentation mask is unavailable
-        # -----------------------------------------------------------
 
         clothing = _crop_from_bbox(
             image,
@@ -473,41 +1195,69 @@ def create_processed_image(
 
     background = Image.new(
         "RGBA",
-        (canvas_size, canvas_size),
-        (248, 247, 244, 255),
+        (
+            canvas_size,
+            canvas_size,
+        ),
+        (
+            248,
+            247,
+            244,
+            255,
+        ),
     )
 
-    # Resize clothing while keeping aspect ratio.
     clothing.thumbnail(
-        (850, 850),
+        (
+            850,
+            850,
+        ),
         Image.Resampling.LANCZOS,
     )
 
-    # Centre clothing.
     x = (
-        canvas_size - clothing.width
+        canvas_size
+        - clothing.width
     ) // 2
 
     y = (
-        canvas_size - clothing.height
+        canvas_size
+        - clothing.height
     ) // 2
 
     background.alpha_composite(
         clothing,
-        (x, y),
+        (
+            x,
+            y,
+        ),
     )
 
-    # Save as JPEG.
-    background.convert("RGB").save(
+    background.convert(
+        "RGB"
+    ).save(
         output_path,
         "JPEG",
         quality=95,
     )
 
     return {
-        "category": detection["category"],
-        "confidence": detection["confidence"],
+        "category": detection.get(
+            "category",
+            "top",
+        ),
+        "confidence": detection.get(
+            "confidence",
+            0.0,
+        ),
         "bbox": bbox,
+        "occlusion_pixels": (
+            int(
+                occlusion_mask.sum()
+            )
+            if occlusion_mask is not None
+            else 0
+        ),
     }
 
 # -------------------------------------------------------------------
@@ -761,6 +1511,18 @@ def analyse_clothing(
     )
 
     detected_category = detection["category"]
+
+    category_map = {
+        "top": "upper",
+        "pants": "lower",
+        "skirt": "lower",
+        "dress": "full",
+    }
+
+    detected_category = category_map.get(
+        detected_category,
+        "upper",
+    )
 
     style, style_confidence = classify_with_clip(
         image_path,

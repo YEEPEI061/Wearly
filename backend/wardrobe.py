@@ -8,7 +8,10 @@ from fastapi import UploadFile
 
 from ai_service import (
     analyse_clothing,
+    detect_clothing,
     create_processed_image,
+    detect_clothing_occlusion,
+    load_models
 )
 
 
@@ -148,8 +151,9 @@ def get_clothing_item(
 # -------------------------------------------------------------------
 async def process_clothing(
     file: UploadFile,
+    selected_category: str | None = None,
 ) -> Dict:
-
+    
     original_name = file.filename or "clothing.jpg"
 
     extension = os.path.splitext(
@@ -206,8 +210,27 @@ async def process_clothing(
         original_path
     )
 
-    # AI analysis information remains available
-    # in the backend for recommendation/evaluation.
+    # ---------------------------------------------------------------
+    # Final category
+    #
+    # AI detects the category, but the user's manual selection
+    # takes priority when provided.
+    # ---------------------------------------------------------------
+
+    ai_category = analysis["category"]
+
+    valid_categories = {
+        "upper",
+        "lower",
+        "full",
+    }
+
+    if selected_category in valid_categories:
+        final_category = selected_category
+    else:
+        final_category = ai_category
+
+
     print(
         f"✓ AI category: {analysis['category']} "
         f"({analysis['category_confidence']:.3f})"
@@ -234,10 +257,6 @@ async def process_clothing(
 
     # ---------------------------------------------------------------
     # Build wardrobe item
-    #
-    # Only store user-facing wardrobe information here.
-    # AI confidence values and embeddings remain in `analysis`
-    # for backend AI/recommendation use.
     # ---------------------------------------------------------------
 
     def generate_clothing_name(color: str, category: str) -> str:
@@ -263,10 +282,10 @@ async def process_clothing(
 
          "name": generate_clothing_name(
             analysis["color"],
-            analysis["category"],
+            final_category,
         ),
 
-        "category": analysis["category"],
+        "category": final_category,
 
         "subcategory": "unknown",
 
@@ -292,27 +311,14 @@ async def process_clothing(
     }
 
     # ---------------------------------------------------------------
-    # Temporary wardrobe storage
+    # Return processed item
     #
-    # This will later be replaced with MySQL.
+    # The item is NOT saved here.
+    # The user must confirm it from Clothing Detail first.
     # ---------------------------------------------------------------
 
-    wardrobe = load_wardrobe()
-
-    wardrobe.append(
-        item
-    )
-
-    save_wardrobe(
-        wardrobe
-    )
-
-    # New wardrobe means old generated
-    # outfit combinations may no longer
-    # represent the current wardrobe.
-    reset_generated_outfits()
-
     return item
+
 
 # -------------------------------------------------------------------
 # Delete clothing
@@ -374,3 +380,43 @@ def delete_clothing(
     reset_generated_outfits()
 
     return True
+
+
+# ============================================================
+# LIGHTWEIGHT CATEGORY DETECTION
+# ============================================================
+
+def detect_category(
+    image_path: str,
+) -> Dict:
+
+    load_models()
+
+    detection = detect_clothing(
+        image_path
+    )
+
+    detected_category = detection.get(
+        "category"
+    )
+
+    category_map = {
+        "top": "upper",
+        "pants": "lower",
+        "skirt": "lower",
+        "dress": "full",
+    }
+
+    category = category_map.get(
+        detected_category,
+        "upper",
+    )
+
+    return {
+        "category": category,
+        "category_confidence": detection.get(
+            "confidence",
+            0.0,
+        ),
+        "detected_label": detected_category,
+    }

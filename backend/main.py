@@ -5,6 +5,7 @@ from fastapi import (
     UploadFile,
     File,
     HTTPException,
+    Form
 )
 from pydantic import BaseModel
 from fastapi.responses import FileResponse
@@ -14,11 +15,13 @@ from pydantic import BaseModel
 from database.clothing import create_clothing_item
 from wardrobe import (
     PROCESSED_DIR,
+    UPLOAD_DIR,
     process_clothing,
     get_wardrobe,
     get_clothing_item,
     delete_clothing,
     reset_generated_outfits,
+    detect_category,
 )
 
 from outfit import (
@@ -153,12 +156,18 @@ async def save_wardrobe_item(request: SaveClothingRequest):
 @app.post("/process-clothing")
 async def process_clothing_route(
     file: UploadFile = File(...),
+    selected_category: str | None = Form(None),
 ):
-
     try:
 
+        print(
+            f"✓ User selected category: "
+            f"{selected_category}"
+        )
+
         item = await process_clothing(
-            file
+            file,
+            selected_category=selected_category,
         )
 
         return {
@@ -176,7 +185,6 @@ async def process_clothing_route(
             status_code=500,
             detail=str(e),
         )
-
 
 @app.delete("/wardrobe/{item_id}")
 def delete_wardrobe_item(
@@ -337,6 +345,96 @@ def outfit_feedback(
             detail=str(e),
         )
 
+
+# ============================================================
+# LIGHTWEIGHT CATEGORY DETECTION
+# ============================================================
+
+@app.post("/detect-category")
+async def detect_category_route(
+    file: UploadFile = File(...),
+):
+
+    try:
+
+        # ----------------------------------------------------
+        # Save temporary uploaded image
+        # ----------------------------------------------------
+
+        import uuid
+
+        extension = os.path.splitext(
+            file.filename or ".jpg"
+        )[1].lower()
+
+        if extension not in (
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+        ):
+            extension = ".jpg"
+
+        temp_filename = (
+            f"category_{uuid.uuid4()}{extension}"
+        )
+
+        temp_path = os.path.join(
+            UPLOAD_DIR,
+            temp_filename,
+        )
+
+        contents = await file.read()
+
+        with open(
+            temp_path,
+            "wb",
+        ) as output:
+            output.write(contents)
+
+        print(
+            f"✓ Category detection image saved: "
+            f"{temp_filename}"
+        )
+
+        # ----------------------------------------------------
+        # FASHN category detection
+        # ----------------------------------------------------
+
+        result = detect_category(
+            temp_path
+        )
+
+        print(
+            f"✓ Detected category: "
+            f"{result['category']} "
+            f"({result['category_confidence']:.3f})"
+        )
+
+        # ----------------------------------------------------
+        # Remove temporary image
+        # ----------------------------------------------------
+
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            **result,
+        }
+
+    except Exception as e:
+
+        print(
+            f"❌ Category detection error: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
 
 # -------------------------------------------------------------------
 # Run directly
