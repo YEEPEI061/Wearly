@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/pages/home_page.dart';
 import 'package:frontend/pages/wardrobe_page.dart';
-import 'package:frontend/pages/stylist_page.dart';
+import 'package:frontend/pages/stylist_start_page.dart';
 import 'package:frontend/pages/history_page.dart';
 import 'package:frontend/pages/profile_page.dart';
 import 'package:frontend/widgets/bottom_nav_bar.dart';
@@ -20,7 +20,7 @@ class _MainPageState extends State<MainPage> {
   final List<Widget> _pages = const [
     HomePage(),
     WardrobePage(),
-    StylistPage(),
+    StylistStartPage(),
     HistoryPage(),
     ProfilePage(),
   ];
@@ -36,10 +36,7 @@ class _MainPageState extends State<MainPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
 
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _pages),
 
       bottomNavigationBar: BottomNavBar(
         selectedIndex: _selectedIndex,

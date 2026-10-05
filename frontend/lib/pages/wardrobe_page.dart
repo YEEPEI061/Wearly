@@ -1,4 +1,8 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
+import 'package:frontend/models/clothing_item.dart';
+import 'package:frontend/services/api_service.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
@@ -16,50 +20,37 @@ class _WardrobePageState extends State<WardrobePage> {
   int _selectedCategory = 0;
   String _searchQuery = '';
 
-  final List<String> _categories = [
-    'ALL ITEMS (42)',
-    'TOPS (14)',
-    'BOTTOMS (9)',
-    'OUTERWEAR (7)',
-    'SHOES (12)',
-  ];
+  List<String> get _categories {
+    final upperCount = _clothingItems
+        .where((item) => item.category == 'top')
+        .length;
 
-  final List<Map<String, String>> _clothingItems = [
-    {
-      'category': 'Tops',
-      'name': 'Silk Poplin Shirt',
-      'brand': 'The Row',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAwu2mDo2VTgzIrnaYDBRfdKxWhhliXCj-yCjqd-EzFKsIhsvjPqGKUMSmBWzQ-558YPjxt_CyociJek-7Mi5uJe7GDVluhfvkWPzPUjWZWNOZ1tKIMucn5CPcVpkvkZUyJ5_m5dSyLtvaJEIVfxGpqwwEWmKS5gJxKMkhiw5ihf1EvcrObgHIBwA5r3onOw47vSCywAy5pw7-QwAY8O8VFX3M2GbaDBCtNR5f1SjMRBvbhMCe3y4R1',
-    },
-    {
-      'category': 'Bottoms',
-      'name': 'Pleated Wool Trousers',
-      'brand': 'Lemaire',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuCctWbczbGxgo68uhP9tyBxrh6_uc0Jo8nTdN-ZlOOXyx0gFsSXsKFNTKrVFONnUcW24icaRiuabEMvsFJl0e0LKtLuy9QUZ6U-JynhfOh7CoB_PrZuWRsP6R-nWfoMJmOnK8zj4i0ShOPGo9Se_PpN63r9QyllpVcO2qPluak4MkH3II4DgaTFqHWSL0oBYCuDl2Wi6A4QhTee-kS1xd0Kou_7SUFYUY-p_AZx9YG4u0wKxFqn9izs',
-    },
-    {
-      'category': 'Tops',
-      'name': 'Ribbed Cashmere Rollneck',
-      'brand': 'COS Atelier',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuCQ7meMv6DexZzBkv_fU3edM7__UCIzxZrt2bKHR2adpEpmg2Q4snPQsdtD96Hr0-vhhpD7gfYfZxxNBlCPXQ7aoOdgkSqZ9XF1gNmy6pX_YxmiGRdzbSVDExJcwUSsRuVjSM_d3pnGvGp7EgyTOOHvobUVHqOKMtARaDxLAilWN07Z_Pwc6Ry8XsJ9IcWjd25v-Y3GNof-Tk2C46F6Q33ZKPtmgz2WiL8Jk53_i6yQllu9kBkgfF-Y',
-    },
-    {
-      'category': 'Outerwear',
-      'name': 'Structured Leather Blazer',
-      'brand': 'Acne Studios',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAIRBdcaWASkQq-Kzy311yxsK7VEtuB98VQOFaHQPrismdlBEVtqeDKhg3xgdS6sOZQ7DsfpWvJNO9F0T8BFX1x-C1OeNVFfS5GU898NxTSwnKecKL22QmoSNT2kocWBylSeN-xidLDk1q7zx1FfI34nO9lOGM57-8CGUY43KFlGetAbycJsxVIkEmZPXr7S6pCvwEiT62FXfusGhwPIs_YCrEkKzXlHSldptfKcUszr6g7Zyxz2qRt',
-    },
-  ];
+    final lowerCount = _clothingItems
+        .where((item) => item.category == 'lower')
+        .length;
 
-  final String _overcoatImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCPfQ9CZ_QSmJNg7YbOha_O9Abp6VNUETrVAGNzvTiuDdmX8azXjWB27K2UPUHbJEf1rFQgXYbCDFt0oeaacXC1I54767lC-SNRgcYyIrlV0JQ6dmUTj1YYADi039K5BZ0gbbOu8PSkHIarsZ4sNMtkRe7sr4wqKFP33q7ClR9PqRNSDVF3A0K1TnBgDvz_X05DjVploukVZ6WAq5LbItWJ1WzL6TNtim2tGcZ0lCkVrTDYFvxBYcrX';
+    final fullCount = _clothingItems
+        .where((item) => item.category == 'full')
+        .length;
 
-  final String _loaferImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDLEOo987cCBnChntM9NDbpw6d2gzQdq537uKfZbJXRxTgKvzOOXq7nFSnHQNkLMxn-Vsa2yreeBSXhKd8R8gexRptMNHNpVoArNsDUuvURe9QAzcdX6eWOxduupWfV8JCAeExeFjVYU212xPUKdOwItXWwS3irRDF0G2Lad-ykNXmImFe1glAHbbwvpGWVfnP0US1Mfq62yztLci01LyqVRSWR2sOttp7T9XbGPiMEbgGWYUtksxOG';
+    return [
+      'ALL ITEMS (${_clothingItems.length})',
+      'TOPS ($upperCount)',
+      'BOTTOMS ($lowerCount)',
+      'FULL ($fullCount)',
+    ];
+  }
+
+  List<ClothingItem> _clothingItems = [];
+
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWardrobe();
+  }
 
   void _onCategorySelected(int index) {
     setState(() {
@@ -92,31 +83,64 @@ class _WardrobePageState extends State<WardrobePage> {
     ).showSnackBar(SnackBar(content: Text('$name will open here.')));
   }
 
-  List<Map<String, String>> get _filteredItems {
-    List<Map<String, String>> items = _clothingItems;
+  List<ClothingItem> get _filteredItems {
+    List<ClothingItem> items = List.from(_clothingItems);
 
     if (_selectedCategory != 0) {
-      final category = _categories[_selectedCategory]
-          .split(' ')
-          .first
-          .toLowerCase();
+      final category = switch (_selectedCategory) {
+        1 => 'top',
+        2 => 'lower',
+        3 => 'full',
+        _ => null,
+      };
 
-      items = items.where((item) {
-        return item['category']!.toLowerCase() == category;
-      }).toList();
+      if (category != null) {
+        items = items.where((item) => item.category == category).toList();
+      }
     }
 
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
 
       items = items.where((item) {
-        return item['name']!.toLowerCase().contains(query) ||
-            item['brand']!.toLowerCase().contains(query) ||
-            item['category']!.toLowerCase().contains(query);
+        return (item.name).toLowerCase().contains(query) ||
+            (item.brand ?? '').toLowerCase().contains(query) ||
+            (item.category).toLowerCase().contains(query) ||
+            (item.color ?? '').toLowerCase().contains(query) ||
+            (item.style ?? '').toLowerCase().contains(query);
       }).toList();
     }
 
     return items;
+  }
+
+  Future<void> _loadWardrobe() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final items = await ApiService.getWardrobe();
+
+      if (!mounted) return;
+
+      setState(() {
+        _clothingItems = items;
+        _isLoading = false;
+      });
+
+      print('✓ Loaded ${items.length} wardrobe items');
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString();
+      });
+
+      print('❌ Failed to load wardrobe: $e');
+    }
   }
 
   @override
@@ -161,7 +185,7 @@ class _WardrobePageState extends State<WardrobePage> {
             // Floating Add Button
             Positioned(
               right: 24,
-              bottom: 100,
+              bottom: 40,
               child: _buildFloatingActionButton(),
             ),
           ],
@@ -245,115 +269,154 @@ class _WardrobePageState extends State<WardrobePage> {
   Widget _buildWardrobeGrid() {
     final items = _filteredItems;
 
-    return Column(
-      children: [
-        _buildFeaturedCard(),
-        const SizedBox(height: 16),
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 80),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-        // Two-column grid
-        if (items.isNotEmpty)
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: items.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.72,
-            ),
-            itemBuilder: (context, index) {
-              return _buildStandardCard(items[index]);
-            },
-          ),
-
-        const SizedBox(height: 16),
-
-        _buildWideFeatureCard(),
-      ],
-    );
-  }
-
-  Widget _buildFeaturedCard() {
-    return GestureDetector(
-      onTap: () => _openItem('Cashmere Overcoat'),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerMedium,
-          borderRadius: BorderRadius.circular(AppRadius.medium),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.03),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+    if (_errorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 80),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.outline),
+
+            const SizedBox(height: 12),
+
             Text(
-              'OUTERWEAR',
-              style: AppTextStyles.labelSmall.copyWith(
-                color: AppColors.onSurfaceVariant,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Cashmere Overcoat',
-              style: AppTextStyles.headlineSmall.copyWith(
+              'Unable to load your wardrobe.',
+              style: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.primary,
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.medium),
-              child: Container(
-                height: 240,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.surfaceContainerHigh.withOpacity(0.5),
-                      Colors.transparent,
-                    ],
-                    begin: Alignment.bottomLeft,
-                    end: Alignment.topRight,
-                  ),
-                ),
-                child: Image.network(
-                  _overcoatImage,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) {
-                    return const Icon(
-                      Icons.checkroom_outlined,
-                      size: 64,
-                      color: AppColors.outline,
-                    );
-                  },
-                ),
               ),
             ),
 
             const SizedBox(height: 12),
 
-            Align(
-              alignment: Alignment.centerRight,
-              child: _buildTag('WORN 4 TIMES'),
+            ElevatedButton(
+              onPressed: _loadWardrobe,
+              child: const Text('TRY AGAIN'),
             ),
           ],
         ),
+      );
+    }
+
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 80),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.checkroom_outlined,
+              size: 56,
+              color: AppColors.outline,
+            ),
+
+            const SizedBox(height: 16),
+
+            Text(
+              _searchQuery.isEmpty
+                  ? 'Your wardrobe is empty.'
+                  : 'No clothing found.',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: items.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 0.72,
       ),
+      itemBuilder: (context, index) {
+        return _buildStandardCard(items[index]);
+      },
     );
   }
 
-  Widget _buildStandardCard(Map<String, String> item) {
+  // Widget _buildFeaturedCard(ClothingItem item) {
+  //   return GestureDetector(
+  //     onTap: () => _openItem(item.name),
+  //     child: Container(
+  //       padding: const EdgeInsets.all(24),
+  //       decoration: BoxDecoration(
+  //         color: AppColors.surfaceContainerMedium,
+  //         borderRadius: BorderRadius.circular(AppRadius.medium),
+  //         boxShadow: [
+  //           BoxShadow(
+  //             color: AppColors.primary.withOpacity(0.03),
+  //             blurRadius: 20,
+  //             offset: const Offset(0, 4),
+  //           ),
+  //         ],
+  //       ),
+  //       child: Column(
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           Text(
+  //             _displayCategory(item.category),
+  //             style: AppTextStyles.labelSmall.copyWith(
+  //               color: AppColors.onSurfaceVariant,
+  //               letterSpacing: 1.5,
+  //             ),
+  //           ),
+
+  //           const SizedBox(height: 4),
+
+  //           Text(
+  //             item.name,
+  //             style: AppTextStyles.headlineSmall.copyWith(
+  //               color: AppColors.primary,
+  //             ),
+  //           ),
+
+  //           const SizedBox(height: 16),
+
+  //           ClipRRect(
+  //             borderRadius: BorderRadius.circular(AppRadius.medium),
+  //             child: Container(
+  //               height: 240,
+  //               width: double.infinity,
+  //               decoration: BoxDecoration(
+  //                 gradient: LinearGradient(
+  //                   colors: [
+  //                     AppColors.surfaceContainerHigh.withOpacity(0.5),
+  //                     Colors.transparent,
+  //                   ],
+  //                   begin: Alignment.bottomLeft,
+  //                   end: Alignment.topRight,
+  //                 ),
+  //               ),
+  //               child: _buildClothingImage(item),
+  //             ),
+  //           ),
+
+  //           const SizedBox(height: 12),
+
+  //           Align(
+  //             alignment: Alignment.centerRight,
+  //             child: _buildTag(item.isFavorite ? 'FAVORITE' : 'IN WARDROBE'),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  Widget _buildStandardCard(ClothingItem item) {
     return GestureDetector(
-      onTap: () => _openItem(item['name']!),
+      onTap: () => _openItem(item.name),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -371,7 +434,7 @@ class _WardrobePageState extends State<WardrobePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              item['category']!.toUpperCase(),
+              _displayCategory(item.category),
               style: AppTextStyles.labelSmall.copyWith(
                 color: AppColors.onSurfaceVariant,
                 letterSpacing: 1.5,
@@ -388,19 +451,7 @@ class _WardrobePageState extends State<WardrobePage> {
                     width: 130,
                     height: 170,
                     color: AppColors.surfaceContainerHigh,
-                    child: Image.network(
-                      item['image']!,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) {
-                        return const Center(
-                          child: Icon(
-                            Icons.checkroom_outlined,
-                            size: 48,
-                            color: AppColors.outline,
-                          ),
-                        );
-                      },
-                    ),
+                    child: _buildClothingImage(item),
                   ),
                 ),
               ),
@@ -409,7 +460,7 @@ class _WardrobePageState extends State<WardrobePage> {
             const SizedBox(height: 8),
 
             Text(
-              item['name']!,
+              item.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.bodyMedium.copyWith(
@@ -420,7 +471,13 @@ class _WardrobePageState extends State<WardrobePage> {
             const SizedBox(height: 2),
 
             Text(
-              item['brand']!,
+              item.brand == null ||
+                      item.brand!.isEmpty ||
+                      item.brand == 'unknown'
+                  ? '${item.color ?? ''} • ${item.style ?? ''}'
+                  : item.brand!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: AppTextStyles.bodySmall.copyWith(
                 color: AppColors.onSurfaceVariant,
               ),
@@ -431,116 +488,146 @@ class _WardrobePageState extends State<WardrobePage> {
     );
   }
 
-  Widget _buildWideFeatureCard() {
-    return GestureDetector(
-      onTap: () => _openItem('Glazed Leather Loafers'),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerMedium,
-          borderRadius: BorderRadius.circular(AppRadius.medium),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.03),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
+  Widget _buildClothingImage(ClothingItem item) {
+    final String? path = item.processedImagePath ?? item.imagePath;
+
+    if (path == null || path.isEmpty) {
+      return const Center(
+        child: Icon(
+          Icons.checkroom_outlined,
+          size: 48,
+          color: AppColors.outline,
         ),
-        child: Column(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.medium),
-              child: Container(
-                height: 190,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.surfaceContainerHigh.withOpacity(0.5),
-                      Colors.transparent,
-                    ],
-                    begin: Alignment.bottomLeft,
-                    end: Alignment.topRight,
-                  ),
-                ),
-                child: Image.network(
-                  _loaferImage,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) {
-                    return const Icon(
-                      Icons.shopping_bag_outlined,
-                      size: 56,
-                      color: AppColors.outline,
-                    );
-                  },
-                ),
-              ),
-            ),
+      );
+    }
 
-            const SizedBox(height: 16),
+    final String imageUrl = '${ApiService.baseUrl}$path';
 
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SHOES',
-                    style: AppTextStyles.labelSmall.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Glazed Leather Loafers',
-                    style: AppTextStyles.headlineSmall.copyWith(
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Prada • Classic Collection',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  Row(
-                    children: [
-                      _buildTag('VERSATILE'),
-                      const SizedBox(width: 8),
-                      _buildTag('FORMAL'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) {
+        return const Center(
+          child: Icon(
+            Icons.checkroom_outlined,
+            size: 48,
+            color: AppColors.outline,
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildTag(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(AppRadius.small),
-      ),
-      child: Text(
-        text,
-        style: AppTextStyles.labelSmall.copyWith(
-          color: AppColors.primary,
-          letterSpacing: 1.0,
-        ),
-      ),
-    );
+  String _displayCategory(String? category) {
+    switch (category) {
+      case 'top':
+        return 'TOPS';
+
+      case 'lower':
+        return 'BOTTOMS';
+
+      case 'full':
+        return 'FULL';
+
+      default:
+        return (category ?? 'CLOTHING').toUpperCase();
+    }
   }
+
+  // Widget _buildWideFeatureCard() {
+  //   return GestureDetector(
+  //     onTap: () => _openItem('Glazed Leather Loafers'),
+  //     child: Container(
+  //       padding: const EdgeInsets.all(24),
+  //       decoration: BoxDecoration(
+  //         color: AppColors.surfaceContainerMedium,
+  //         borderRadius: BorderRadius.circular(AppRadius.medium),
+  //         boxShadow: [
+  //           BoxShadow(
+  //             color: AppColors.primary.withOpacity(0.03),
+  //             blurRadius: 20,
+  //             offset: const Offset(0, 4),
+  //           ),
+  //         ],
+  //       ),
+  //       child: Column(
+  //         children: [
+  //           ClipRRect(
+  //             borderRadius: BorderRadius.circular(AppRadius.medium),
+  //             child: Container(
+  //               height: 190,
+  //               width: double.infinity,
+  //               decoration: BoxDecoration(
+  //                 gradient: LinearGradient(
+  //                   colors: [
+  //                     AppColors.surfaceContainerHigh.withOpacity(0.5),
+  //                     Colors.transparent,
+  //                   ],
+  //                   begin: Alignment.bottomLeft,
+  //                   end: Alignment.topRight,
+  //                 ),
+  //               ),
+  //               child: Image.network(
+  //                 _loaferImage,
+  //                 fit: BoxFit.contain,
+  //                 errorBuilder: (_, __, ___) {
+  //                   return const Icon(
+  //                     Icons.shopping_bag_outlined,
+  //                     size: 56,
+  //                     color: AppColors.outline,
+  //                   );
+  //                 },
+  //               ),
+  //             ),
+  //           ),
+
+  //           const SizedBox(height: 16),
+
+  //           Align(
+  //             alignment: Alignment.centerLeft,
+  //             child: Column(
+  //               crossAxisAlignment: CrossAxisAlignment.start,
+  //               children: [
+  //                 Text(
+  //                   'SHOES',
+  //                   style: AppTextStyles.labelSmall.copyWith(
+  //                     color: AppColors.onSurfaceVariant,
+  //                     letterSpacing: 1.5,
+  //                   ),
+  //                 ),
+  //                 const SizedBox(height: 4),
+  //                 Text(
+  //                   'Glazed Leather Loafers',
+  //                   style: AppTextStyles.headlineSmall.copyWith(
+  //                     color: AppColors.primary,
+  //                   ),
+  //                 ),
+  //                 const SizedBox(height: 4),
+  //                 Text(
+  //                   'Prada • Classic Collection',
+  //                   style: AppTextStyles.bodySmall.copyWith(
+  //                     color: AppColors.onSurfaceVariant,
+  //                   ),
+  //                 ),
+
+  //                 const SizedBox(height: 16),
+
+  //                 Row(
+  //                   children: [
+  //                     _buildTag('VERSATILE'),
+  //                     const SizedBox(width: 8),
+  //                     _buildTag('FORMAL'),
+  //                   ],
+  //                 ),
+  //               ],
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
 
   Widget _buildFloatingActionButton() {
     return GestureDetector(
@@ -549,7 +636,7 @@ class _WardrobePageState extends State<WardrobePage> {
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          color: AppColors.primary.withOpacity(0.8),
           borderRadius: BorderRadius.circular(AppRadius.full),
           boxShadow: [
             BoxShadow(

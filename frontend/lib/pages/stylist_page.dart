@@ -1,8 +1,10 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
-import 'package:frontend/widgets/app_header.dart';
+import 'package:frontend/widgets/app_page_header.dart';
 
 class StylistPage extends StatefulWidget {
   const StylistPage({super.key});
@@ -123,39 +125,23 @@ class _StylistPageState extends State<StylistPage>
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        bottom: true,
-        child: Stack(
+        child: Column(
           children: [
-            CustomScrollView(
-              slivers: [
-                AppHeader(
-                  title: 'OUTFIT STYLIST',
-                  onNotificationTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Notifications will be connected later.'),
-                      ),
-                    );
-                  },
-                  onProfileTap: () {
-                    // Navigate to Profile
-                  },
-                ),
+            const AppPageHeader(title: 'OUTFIT STYLIST'),
 
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 38),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      const SizedBox(height: 8),
-                      _buildIntro(),
-                      const SizedBox(height: 20),
-                      _buildRecommendationCard(),
-                      const SizedBox(height: 24),
-                      _buildScheduleButton(),
-                    ]),
-                  ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+                child: Column(
+                  children: [
+                    _buildIntro(),
+                    const SizedBox(height: 24),
+                    _buildRecommendationCard(),
+                    const SizedBox(height: 24),
+                    _buildScheduleButton(),
+                  ],
                 ),
-              ],
+              ),
             ),
           ],
         ),

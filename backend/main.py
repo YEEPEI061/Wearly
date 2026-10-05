@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from database.db import get_connection
 
 from database.clothing import create_clothing_item
 from wardrobe import (
@@ -88,11 +89,52 @@ def root():
 # -------------------------------------------------------------------
 
 @app.get("/wardrobe")
-def wardrobe():
+async def get_wardrobe():
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
 
-    return {
-        "items": get_wardrobe()
-    }
+        query = """
+            SELECT
+                id,
+                user_id,
+                name,
+                category,
+                subcategory,
+                brand,
+                color,
+                style,
+                material,
+                image_path,
+                processed_image_path,
+                is_favorite,
+                is_active,
+                created_at,
+                updated_at
+            FROM clothing_items
+            WHERE is_active = TRUE
+            ORDER BY created_at DESC
+        """
+
+        cursor.execute(query)
+
+        items = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "success": True,
+            "items": items,
+        }
+
+    except Exception as e:
+        print(f"❌ Failed to load wardrobe: {e}")
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
 
 
 @app.get("/wardrobe/{item_id}")

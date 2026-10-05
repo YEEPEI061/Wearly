@@ -17,37 +17,6 @@ class ApiService {
   // Android emulator
   // static const String baseUrl = 'http://10.0.2.2:8000';
 
-  // iOS simulator
-  // static const String baseUrl = 'http://127.0.0.1:8000';
-
-  // ========================================================
-  // IMAGE CONTENT TYPE
-  // ========================================================
-
-  static MediaType _getImageContentType(String path) {
-    final extension = path.split('.').last.toLowerCase();
-
-    switch (extension) {
-      case 'png':
-        return MediaType('image', 'png');
-
-      case 'webp':
-        return MediaType('image', 'webp');
-
-      case 'gif':
-        return MediaType('image', 'gif');
-
-      case 'heic':
-      case 'heif':
-        return MediaType('image', 'heic');
-
-      case 'jpg':
-      case 'jpeg':
-      default:
-        return MediaType('image', 'jpeg');
-    }
-  }
-
   // ========================================================
   // PROCESS CLOTHING
   // ========================================================
@@ -144,15 +113,20 @@ class ApiService {
   static Future<List<ClothingItem>> getWardrobe() async {
     final response = await http.get(Uri.parse('$baseUrl/wardrobe'));
 
+    print('WARDROBE STATUS: ${response.statusCode}');
+    print('WARDROBE RESPONSE: ${response.body}');
+
     if (response.statusCode != 200) {
-      throw Exception('Failed to load wardrobe: ${response.body}');
+      throw Exception('Unable to load wardrobe: ${response.body}');
     }
 
     final data = jsonDecode(response.body);
 
-    final List items = data['items'] ?? [];
+    final List<dynamic> items = data['items'] ?? [];
 
-    return items.map((item) => ClothingItem.fromJson(item)).toList();
+    return items
+        .map((item) => ClothingItem.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   // ========================================================
