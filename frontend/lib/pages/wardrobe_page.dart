@@ -22,7 +22,7 @@ class _WardrobePageState extends State<WardrobePage> {
 
   List<String> get _categories {
     final upperCount = _clothingItems
-        .where((item) => item.category == 'top')
+        .where((item) => item.category == 'upper')
         .length;
 
     final lowerCount = _clothingItems
@@ -35,8 +35,8 @@ class _WardrobePageState extends State<WardrobePage> {
 
     return [
       'ALL ITEMS (${_clothingItems.length})',
-      'TOPS ($upperCount)',
-      'BOTTOMS ($lowerCount)',
+      'UPPERS ($upperCount)',
+      'LOWERS ($lowerCount)',
       'FULL ($fullCount)',
     ];
   }
@@ -70,11 +70,17 @@ class _WardrobePageState extends State<WardrobePage> {
     );
   }
 
-  void _addClothing() {
-    Navigator.push(
+  Future<void> _addClothing() async {
+    final saved = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (context) => const AddClothingPage()),
+      MaterialPageRoute(builder: (_) => const AddClothingPage()),
     );
+
+    if (!mounted) return;
+
+    if (saved == true) {
+      await _loadWardrobe();
+    }
   }
 
   void _openItem(String name) {
@@ -88,7 +94,7 @@ class _WardrobePageState extends State<WardrobePage> {
 
     if (_selectedCategory != 0) {
       final category = switch (_selectedCategory) {
-        1 => 'top',
+        1 => 'upper',
         2 => 'lower',
         3 => 'full',
         _ => null,
@@ -520,11 +526,11 @@ class _WardrobePageState extends State<WardrobePage> {
 
   String _displayCategory(String? category) {
     switch (category) {
-      case 'top':
-        return 'TOPS';
+      case 'upper':
+        return 'UPPERS';
 
       case 'lower':
-        return 'BOTTOMS';
+        return 'LOWERS';
 
       case 'full':
         return 'FULL';
@@ -627,7 +633,6 @@ class _WardrobePageState extends State<WardrobePage> {
   //     ),
   //   );
   // }
-
 
   Widget _buildFloatingActionButton() {
     return GestureDetector(

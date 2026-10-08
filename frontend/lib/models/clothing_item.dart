@@ -13,6 +13,16 @@ class ClothingItem {
   final bool isActive;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? detectedCategory;
+  final double? categoryConfidence;
+  final String? detectedColor;
+  final double? colorConfidence;
+  final String? detectedStyle;
+  final double? styleConfidence;
+  final Map<String, dynamic>? styleScores;
+  final Map<String, dynamic>? colorScores;
+  final List<double>? visualEmbedding;
+  final String? analysisVersion;
 
   ClothingItem({
     required this.id,
@@ -29,6 +39,16 @@ class ClothingItem {
     this.isActive = true,
     this.createdAt,
     this.updatedAt,
+    this.detectedCategory,
+    this.categoryConfidence,
+    this.detectedColor,
+    this.colorConfidence,
+    this.detectedStyle,
+    this.styleConfidence,
+    this.styleScores,
+    this.colorScores,
+    this.visualEmbedding,
+    this.analysisVersion,
   });
 
   factory ClothingItem.fromJson(Map<String, dynamic> json) {
@@ -45,8 +65,7 @@ class ClothingItem {
 
       imagePath: json['image_path']?.toString(),
 
-      processedImagePath:
-          json['processed_image_path']?.toString(),
+      processedImagePath: json['processed_image_path']?.toString(),
 
       isFavorite: json['is_favorite'] == true || json['is_favorite'] == 1,
 
@@ -57,6 +76,20 @@ class ClothingItem {
       createdAt: _parseDate(json['created_at']),
 
       updatedAt: _parseDate(json['updated_at']),
+
+      detectedCategory: json['detected_category']?.toString(),
+
+      categoryConfidence: (json['category_confidence'] as num?)?.toDouble(),
+
+      detectedColor: json['detected_color']?.toString(),
+
+      colorConfidence: (json['color_confidence'] as num?)?.toDouble(),
+
+      detectedStyle: json['detected_style']?.toString(),
+
+      styleConfidence: (json['style_confidence'] as num?)?.toDouble(),
+
+      analysisVersion: json['analysis_version']?.toString(),
     );
   }
 
@@ -76,6 +109,13 @@ class ClothingItem {
       'is_active': isActive,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
+      'detected_category': detectedCategory,
+      'category_confidence': categoryConfidence,
+      'detected_color': detectedColor,
+      'color_confidence': colorConfidence,
+      'detected_style': detectedStyle,
+      'style_confidence': styleConfidence,
+      'analysis_version': analysisVersion,
     };
   }
 

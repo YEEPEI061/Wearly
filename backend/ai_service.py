@@ -1575,19 +1575,46 @@ def category_group(category: str) -> str:
     )
 
 
-def compare_embeddings(
-    embedding_a,
-    embedding_b,
-) -> float:
+def compare_embeddings(item_a, item_b):
 
-    if not embedding_a or not embedding_b:
+    embedding_a = item_a.get("embedding")
+    embedding_b = item_b.get("embedding")
+
+    if embedding_a is None or embedding_b is None:
         return 0.0
 
-    try:
-        return cosine_similarity(
+    embedding_a = np.asarray(
+        embedding_a,
+        dtype=np.float32,
+    )
+
+    embedding_b = np.asarray(
+        embedding_b,
+        dtype=np.float32,
+    )
+
+    norm_a = np.linalg.norm(embedding_a)
+    norm_b = np.linalg.norm(embedding_b)
+
+    if (
+        not np.isfinite(norm_a)
+        or not np.isfinite(norm_b)
+        or norm_a == 0
+        or norm_b == 0
+    ):
+        return 0.0
+
+    embedding_a = embedding_a / norm_a
+    embedding_b = embedding_b / norm_b
+
+    similarity = float(
+        np.dot(
             embedding_a,
             embedding_b,
         )
+    )
 
-    except Exception:
+    if not math.isfinite(similarity):
         return 0.0
+
+    return similarity

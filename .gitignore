@@ -68,6 +68,8 @@ backend/debug/
 # Local development wardrobe data
 backend/wardrobe.json
 
+/backend/outfit_previews/
+
 
 # =========================================================
 # Environment / Secrets

@@ -1,15 +1,24 @@
 import os
 import json
-import uuid
-import random
+import math
+import numpy as np
 from datetime import datetime
 from typing import List, Dict, Optional
+from PIL import Image
+
 
 from ai_service import (
     category_group,
     compare_embeddings,
 )
-from wardrobe import load_wardrobe
+from database.clothing import get_clothing_items
+from database.outfit import save_generated_outfits
+from database.outfit import (
+    save_generated_outfits,
+    update_outfit_preview,
+    find_existing_outfit,
+)
+from database.db import get_connection
 
 
 BASE_DIR = os.path.dirname(
@@ -21,6 +30,16 @@ GENERATED_OUTFITS_FILE = os.path.join(
     "generated_outfits.json",
 )
 
+OUTFIT_PREVIEW_DIR = os.path.join(
+    BASE_DIR,
+    "outfit_previews",
+)
+
+os.makedirs(
+    OUTFIT_PREVIEW_DIR,
+    exist_ok=True,
+)
+
 PREFERENCES_FILE = os.path.join(
     BASE_DIR,
     "preferences.json",
@@ -30,6 +49,25 @@ PREFERENCES_FILE = os.path.join(
 # -------------------------------------------------------------------
 # JSON helpers
 # -------------------------------------------------------------------
+def sanitize_json_value(value):
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return 0.0
+        return value
+
+    if isinstance(value, dict):
+        return {
+            key: sanitize_json_value(val)
+            for key, val in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            sanitize_json_value(item)
+            for item in value
+        ]
+
+    return value
 
 def _load_json(
     path: str,
@@ -78,13 +116,13 @@ def load_generated_outfits():
     )
 
 
-def save_generated_outfits(
-    outfits: List[Dict],
-):
-    _save_json(
-        GENERATED_OUTFITS_FILE,
-        outfits,
-    )
+# def save_generated_outfits(
+#     outfits: List[Dict],
+# ):
+#     _save_json(
+#         GENERATED_OUTFITS_FILE,
+#         outfits,
+#     )
 
 
 # -------------------------------------------------------------------
@@ -417,31 +455,30 @@ def color_score(
 # Pair score
 # -------------------------------------------------------------------
 
-def calculate_pair_score(
-    item_a: Dict,
-    item_b: Dict,
-) -> Dict:
+def calculate_pair_score(item_a, item_b):
 
     style = style_score(
-        item_a.get("style", ""),
-        item_b.get("style", ""),
+        item_a.get("style", "casual"),
+        item_b.get("style", "casual"),
     )
 
     color = color_score(
-        item_a.get("color", ""),
-        item_b.get("color", ""),
+        item_a.get("color", "unknown"),
+        item_b.get("color", "unknown"),
     )
 
     visual = compare_embeddings(
-        item_a.get("visual_embedding"),
-        item_b.get("visual_embedding"),
+        item_a,
+        item_b,
     )
 
-    # Convert cosine similarity
-    # from [-1, 1] to approximately [0, 1].
-    visual_normalized = (
-        visual + 1
-    ) / 2
+    if not math.isfinite(visual):
+        visual = 0.0
+
+    visual_normalized = (visual + 1.0) / 2.0
+
+    if not math.isfinite(visual_normalized):
+        visual_normalized = 0.0
 
     final_score = (
         style * 0.40
@@ -449,19 +486,15 @@ def calculate_pair_score(
         + visual_normalized * 0.25
     )
 
-    return {
-        "style_score": round(style, 4),
-        "color_score": round(color, 4),
-        "visual_score": round(
-            visual_normalized,
-            4,
-        ),
-        "score": round(
-            final_score,
-            4,
-        ),
-    }
+    if not math.isfinite(final_score):
+        final_score = 0.0
 
+    return {
+        "score": final_score,
+        "style_score": style,
+        "color_score": color,
+        "visual_score": visual_normalized,
+    }
 
 # -------------------------------------------------------------------
 # Personalisation score
@@ -521,6 +554,363 @@ def personalization_bonus(
 
     return bonus
 
+# -------------------------------------------------------------------
+# Outfit preview image
+# -------------------------------------------------------------------
+
+def _remove_wearly_background(
+    image: Image.Image,
+) -> Image.Image:
+
+    image = image.convert("RGBA")
+
+    pixels = image.load()
+
+    width, height = image.size
+
+    background_color = (
+        248,
+        247,
+        244,
+    )
+
+    tolerance = 18
+
+    for y in range(height):
+
+        for x in range(width):
+
+            r, g, b, a = pixels[x, y]
+
+            distance = (
+                abs(r - background_color[0])
+                + abs(g - background_color[1])
+                + abs(b - background_color[2])
+            )
+
+            if distance <= tolerance * 3:
+
+                pixels[x, y] = (
+                    r,
+                    g,
+                    b,
+                    0,
+                )
+
+    bbox = image.getbbox()
+
+    if bbox is None:
+        return image
+
+    return image.crop(bbox)
+
+
+def _load_processed_clothing(
+    item: Dict,
+) -> Optional[Image.Image]:
+
+    processed_path = item.get(
+        "processed_image_path"
+    )
+
+    if not processed_path:
+        return None
+
+    # Example:
+    # /processed/abc123.jpg
+    filename = os.path.basename(
+        processed_path
+    )
+
+    path = os.path.join(
+        BASE_DIR,
+        "processed",
+        filename,
+    )
+
+    if not os.path.exists(path):
+
+        print(
+            f"⚠ Outfit image not found: {path}"
+        )
+
+        return None
+
+    try:
+
+        image = Image.open(
+            path
+        ).convert("RGBA")
+
+        return _remove_wearly_background(
+            image
+        )
+
+    except Exception as e:
+
+        print(
+            f"⚠ Failed to load outfit image: {e}"
+        )
+
+        return None
+
+
+def create_outfit_preview(
+    outfit_id: str,
+    items: List[Dict],
+) -> Optional[str]:
+
+    if not items:
+        return None
+
+    # ---------------------------------------------------------------
+    # Full-body outfit
+    # ---------------------------------------------------------------
+
+    full_item = next(
+        (
+            item
+            for item in items
+            if category_group(
+                item.get("category", "")
+            ) == "full"
+        ),
+        None,
+    )
+
+    if full_item is not None:
+
+        clothing = _load_processed_clothing(
+            full_item
+        )
+
+        if clothing is None:
+            return None
+
+        canvas = Image.new(
+            "RGBA",
+            (
+                800,
+                1000,
+            ),
+            (
+                248,
+                247,
+                244,
+                255,
+            ),
+        )
+
+        clothing.thumbnail(
+            (
+                620,
+                850,
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+        x = (
+            canvas.width
+            - clothing.width
+        ) // 2
+
+        y = (
+            canvas.height
+            - clothing.height
+        ) // 2
+
+        canvas.alpha_composite(
+            clothing,
+            (
+                x,
+                y,
+            ),
+        )
+
+    else:
+
+        # -----------------------------------------------------------
+        # Upper + lower outfit
+        # -----------------------------------------------------------
+
+        upper_item = next(
+            (
+                item
+                for item in items
+                if category_group(
+                    item.get("category", "")
+                ) == "upper"
+            ),
+            None,
+        )
+
+        lower_item = next(
+            (
+                item
+                for item in items
+                if category_group(
+                    item.get("category", "")
+                ) == "lower"
+            ),
+            None,
+        )
+
+        if upper_item is None or lower_item is None:
+
+            print(
+                "⚠ Cannot create outfit preview: "
+                "upper/lower item missing."
+            )
+
+            return None
+
+        upper_image = _load_processed_clothing(
+            upper_item
+        )
+
+        lower_image = _load_processed_clothing(
+            lower_item
+        )
+
+        if upper_image is None or lower_image is None:
+
+            return None
+
+        # -----------------------------------------------------------
+        # Final outfit canvas
+        # -----------------------------------------------------------
+
+        canvas = Image.new(
+            "RGBA",
+            (
+                800,
+                800,
+            ),
+            (
+                248,
+                247,
+                244,
+                255,
+            ),
+        )
+
+
+        # -------------------------
+        # UPPER
+        # -------------------------
+
+        upper_image.thumbnail(
+            (
+                430,
+                275,
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+        upper_x = (
+            canvas.width
+            - upper_image.width
+        ) // 2
+
+        upper_y = 18
+
+        canvas.alpha_composite(
+            upper_image,
+            (
+                upper_x,
+                upper_y,
+            ),
+        )
+
+
+        # -------------------------
+        # LOWER
+        # -------------------------
+
+        lower_image.thumbnail(
+            (
+                520,
+                470,
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+        lower_x = (
+            canvas.width
+            - lower_image.width
+        ) // 2
+
+        lower_y = 320
+
+        canvas.alpha_composite(
+            lower_image,
+            (
+                lower_x,
+                lower_y,
+            ),
+        )
+
+    # ---------------------------------------------------------------
+    # Save
+    # ---------------------------------------------------------------
+
+    filename = (
+        f"{outfit_id}.jpg"
+    )
+
+    output_path = os.path.join(
+        OUTFIT_PREVIEW_DIR,
+        filename,
+    )
+
+    canvas.convert(
+        "RGB"
+    ).save(
+        output_path,
+        "JPEG",
+        quality=95,
+    )
+
+    print(
+        f"✓ Outfit preview created: {output_path}"
+    )
+
+    return (
+        f"/outfit-previews/{filename}"
+    )
+
+def cleanup_old_outfit_previews(
+    keep_latest: int = 20,
+):
+    files = []
+
+    for filename in os.listdir(OUTFIT_PREVIEW_DIR):
+        if not filename.lower().endswith(".jpg"):
+            continue
+
+        path = os.path.join(
+            OUTFIT_PREVIEW_DIR,
+            filename,
+        )
+
+        if os.path.isfile(path):
+            files.append(path)
+
+    files.sort(
+        key=os.path.getmtime,
+        reverse=True,
+    )
+
+    for path in files[keep_latest:]:
+        try:
+            os.remove(path)
+            print(
+                f"🗑️ Removed old outfit preview: {path}"
+            )
+        except Exception as e:
+            print(
+                f"⚠ Failed to remove old preview: {e}"
+            )
 
 # -------------------------------------------------------------------
 # Generate outfit
@@ -530,7 +920,7 @@ def generate_outfits(
     count: int = 5,
 ) -> List[Dict]:
 
-    wardrobe = load_wardrobe()
+    wardrobe = get_clothing_items()
 
     if len(wardrobe) < 2:
         return []
@@ -650,12 +1040,19 @@ def generate_outfits(
         reverse=True,
     )
 
+    # ---------------------------------------------------------------
     # Remove duplicate item combinations
+    # ---------------------------------------------------------------
+
     seen = set()
 
+    # Existing outfits that can be reused
     results = []
 
-    for candidate in candidates:
+    # Brand-new outfits that still need to be saved
+    new_outfits = []
+
+    for candidate in candidates[:20]:
 
         ids = tuple(
             sorted(
@@ -669,32 +1066,179 @@ def generate_outfits(
 
         seen.add(ids)
 
-        outfit_id = str(
-            uuid.uuid4()
+        # -----------------------------------------------------------
+        # Check whether this exact clothing combination already exists
+        # -----------------------------------------------------------
+
+        clothing_ids = [
+            int(item["id"])
+            for item in candidate["items"]
+        ]
+
+        existing_outfit = find_existing_outfit(
+            clothing_ids=clothing_ids,
         )
 
-        result = {
-            "id": outfit_id,
-            "title": "AI Outfit",
-            "items": candidate["items"],
-            "score": round(
-                candidate["score"],
-                4,
-            ),
-            "reason": candidate["reason"],
-            "score_breakdown": candidate.get(
-                "score_breakdown"
-            ),
-            "created_at": datetime.now().isoformat(),
-        }
+        if existing_outfit is not None:
 
-        results.append(result)
+            print(
+                "🔎 EXISTING OUTFIT FOUND:",
+                existing_outfit["id"],
+            )
 
-        if len(results) >= count:
+            # -------------------------------------------------------
+            # Skip if previously disliked
+            # -------------------------------------------------------
+
+            if existing_outfit.get("feedback") == "DISLIKE":
+
+                print(
+                    "👎 EXISTING OUTFIT WAS DISLIKED - SKIPPING:",
+                    existing_outfit["id"],
+                )
+
+                continue
+
+            # -------------------------------------------------------
+            # Reuse existing outfit
+            # -------------------------------------------------------
+
+            print(
+                "♻️ REUSING EXISTING OUTFIT:",
+                existing_outfit["id"],
+            )
+
+            result = {
+                "id": existing_outfit["id"],
+                "title": existing_outfit.get(
+                    "title",
+                    "AI Outfit",
+                ),
+                "items": candidate["items"],
+                "image_url": existing_outfit.get(
+                    "image_url"
+                ),
+                "score": float(
+                    existing_outfit.get(
+                        "recommendation_score",
+                        candidate["score"],
+                    )
+                ),
+                "reason": candidate["reason"],
+                "score_breakdown": candidate.get(
+                    "score_breakdown"
+                ),
+                "created_at": (
+                    existing_outfit["created_at"].isoformat()
+                    if existing_outfit.get("created_at")
+                    else None
+                ),
+            }
+
+            results.append(result)
+
+        else:
+
+            print(
+                "👕 PREVIEW ITEMS:",
+                [
+                    (
+                        item.get("id"),
+                        item.get("name"),
+                        item.get("category"),
+                        item.get("processed_image_path"),
+                    )
+                    for item in candidate["items"]
+                ],
+            )
+
+            # -------------------------------------------------------
+            # New outfit
+            #
+            # No ID yet.
+            # MySQL will generate the ID later.
+            # -------------------------------------------------------
+
+            result = {
+                "title": "AI Outfit",
+                "items": candidate["items"],
+                "score": round(
+                    candidate["score"],
+                    4,
+                ),
+                "reason": candidate["reason"],
+                "score_breakdown": candidate.get(
+                    "score_breakdown"
+                ),
+            }
+
+            new_outfits.append(result)
+
+        # -----------------------------------------------------------
+        # Stop collecting once we have enough outfits
+        # -----------------------------------------------------------
+
+        if len(results) + len(new_outfits) >= count:
             break
 
-    save_generated_outfits(
-        results
+    # ---------------------------------------------------------------
+    # Save ONLY brand-new outfits to MySQL
+    # ---------------------------------------------------------------
+
+    if new_outfits:
+
+        saved_new_outfits = save_generated_outfits(
+            new_outfits
+        )
+
+        # -----------------------------------------------------------
+        # Generate preview for newly saved outfits
+        # -----------------------------------------------------------
+
+        for saved_outfit in saved_new_outfits:
+
+            outfit_id = saved_outfit["id"]
+
+            preview_image = create_outfit_preview(
+                str(outfit_id),
+                saved_outfit["items"],
+            )
+
+            if preview_image is None:
+                continue
+
+            saved_outfit["image_url"] = preview_image
+
+            print(
+                "🔥 GENERATED OUTFIT IMAGE URL:",
+                preview_image,
+            )
+
+            update_outfit_preview(
+                outfit_id=outfit_id,
+                image_url=preview_image,
+            )
+
+        # -----------------------------------------------------------
+        # Add newly saved outfits to final results
+        # -----------------------------------------------------------
+
+        results.extend(
+            saved_new_outfits
+        )
+
+    # ---------------------------------------------------------------
+    # Keep only requested number of results
+    # ---------------------------------------------------------------
+
+    results = results[:count]
+
+    # ---------------------------------------------------------------
+    # Cleanup old preview images
+    # ---------------------------------------------------------------
+
+    cleanup_old_outfit_previews(
+        keep_latest=20
     )
 
     return results
@@ -750,6 +1294,26 @@ def submit_feedback(
         return None
 
     preferences = load_preferences()
+
+    preferences.setdefault(
+        "preferred_styles",
+        [],
+    )
+
+    preferences.setdefault(
+        "preferred_colors",
+        [],
+    )
+
+    preferences.setdefault(
+        "disliked_styles",
+        [],
+    )
+
+    preferences.setdefault(
+        "disliked_colors",
+        [],
+    )
 
     if feedback == "LIKE":
 
@@ -824,5 +1388,10 @@ def submit_feedback(
     save_generated_outfits(
         outfits
     )
+
+    print("========================================")
+    print("FEEDBACK RESULT")
+    print(outfit)
+    print("========================================")
 
     return outfit

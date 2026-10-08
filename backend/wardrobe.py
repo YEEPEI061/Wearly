@@ -280,7 +280,7 @@ async def process_clothing(
     item = {
         "id": item_id,
 
-         "name": generate_clothing_name(
+        "name": generate_clothing_name(
             analysis["color"],
             final_category,
         ),
@@ -303,9 +303,29 @@ async def process_clothing(
 
         "original_filename": original_name,
 
-        "model_name": analysis[
-            "model_name"
+        # ---------------------------------------------------------------
+        # AI analysis
+        # ---------------------------------------------------------------
+
+        "detected_category": analysis["category"],
+
+        "category_confidence": analysis[
+            "category_confidence"
         ],
+
+        "detected_color": analysis["color"],
+
+        "color_confidence": analysis[
+            "color_confidence"
+        ],
+
+        "detected_style": analysis["style"],
+
+        "style_confidence": analysis[
+            "style_confidence"
+        ],
+
+        "analysis_version": "1.0",
 
         "created_at": datetime.now().isoformat(),
     }

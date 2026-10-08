@@ -186,7 +186,7 @@ class _AddClothingPageState extends State<AddClothingPage> {
       });
 
       // Go to Clothing Detail for user confirmation/editing.
-      await Navigator.push(
+      final saved = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => ClothingDetailPage(
@@ -199,7 +199,11 @@ class _AddClothingPageState extends State<AddClothingPage> {
 
       if (!mounted) return;
 
-      // Reset Add Clothing page after returning.
+      if (saved == true) {
+        Navigator.pop(context, true);
+        return;
+      }
+
       setState(() {
         _selectedImage = null;
       });

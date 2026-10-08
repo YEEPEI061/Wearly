@@ -39,6 +39,8 @@ def connect_to_mysql(database=None):
         print(f"❌ MySQL connection error: {e}")
         return None
 
+    return None
+
 
 # ============================================================
 # CREATE DATABASE
@@ -70,6 +72,12 @@ def create_database():
 
     except Error as e:
         print(f"❌ Failed to create database: {e}")
+
+        try:
+            connection.close()
+        except Exception:
+            pass
+
         return False
 
 
@@ -103,7 +111,8 @@ def create_tables():
 
                 profile_image VARCHAR(500),
 
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME NOT NULL
+                    DEFAULT CURRENT_TIMESTAMP,
 
                 updated_at DATETIME NOT NULL
                     DEFAULT CURRENT_TIMESTAMP
@@ -186,7 +195,8 @@ def create_tables():
 
                 is_active BOOLEAN NOT NULL DEFAULT TRUE,
 
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME NOT NULL
+                    DEFAULT CURRENT_TIMESTAMP,
 
                 updated_at DATETIME NOT NULL
                     DEFAULT CURRENT_TIMESTAMP
@@ -230,10 +240,6 @@ def create_tables():
 
                 style_confidence DECIMAL(5,4),
 
-                visual_embedding LONGTEXT,
-
-                model_name VARCHAR(150),
-
                 analysis_version VARCHAR(50),
 
                 analyzed_at DATETIME NOT NULL
@@ -252,6 +258,9 @@ def create_tables():
 
         # ====================================================
         # 5. OUTFITS
+        #
+        # Outfit IDs use UUID strings because the current
+        # recommendation system generates UUIDs.
         # ====================================================
 
         cursor.execute(
@@ -273,11 +282,14 @@ def create_tables():
 
                 recommendation_score DECIMAL(6,4),
 
+                image_url VARCHAR(500),
+
                 is_generated BOOLEAN NOT NULL DEFAULT TRUE,
 
                 is_saved BOOLEAN NOT NULL DEFAULT FALSE,
 
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME NOT NULL
+                    DEFAULT CURRENT_TIMESTAMP,
 
                 CONSTRAINT fk_outfit_user
                     FOREIGN KEY (user_id)
@@ -322,6 +334,14 @@ def create_tables():
                 UNIQUE KEY unique_outfit_clothing (
                     outfit_id,
                     clothing_id
+                ),
+
+                INDEX idx_outfit_items_outfit (
+                    outfit_id
+                ),
+
+                INDEX idx_outfit_items_clothing (
+                    clothing_id
                 )
             )
             """
@@ -343,7 +363,10 @@ def create_tables():
 
                 outfit_id BIGINT UNSIGNED NOT NULL,
 
-                feedback ENUM('LIKE', 'DISLIKE') NOT NULL,
+                feedback ENUM(
+                    'LIKE',
+                    'DISLIKE'
+                ) NOT NULL,
 
                 created_at DATETIME NOT NULL
                     DEFAULT CURRENT_TIMESTAMP,
@@ -360,6 +383,14 @@ def create_tables():
 
                 UNIQUE KEY unique_user_outfit_feedback (
                     user_id,
+                    outfit_id
+                ),
+
+                INDEX idx_feedback_user (
+                    user_id
+                ),
+
+                INDEX idx_feedback_outfit (
                     outfit_id
                 )
             )
@@ -402,6 +433,10 @@ def create_tables():
                 INDEX idx_history_user_date (
                     user_id,
                     worn_date
+                ),
+
+                INDEX idx_history_outfit (
+                    outfit_id
                 )
             )
             """
@@ -436,8 +471,6 @@ def create_tables():
                     'FAILED'
                 ) NOT NULL DEFAULT 'PENDING',
 
-                model_name VARCHAR(150),
-
                 error_message VARCHAR(500),
 
                 created_at DATETIME NOT NULL
@@ -455,7 +488,9 @@ def create_tables():
                     REFERENCES clothing_items(id)
                     ON DELETE SET NULL,
 
-                INDEX idx_tryon_user (user_id)
+                INDEX idx_tryon_user (
+                    user_id
+                )
             )
             """
         )
@@ -488,7 +523,8 @@ def create_tables():
 
                 weather_summary VARCHAR(500),
 
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME NOT NULL
+                    DEFAULT CURRENT_TIMESTAMP,
 
                 updated_at DATETIME NOT NULL
                     DEFAULT CURRENT_TIMESTAMP
@@ -499,7 +535,9 @@ def create_tables():
                     REFERENCES users(id)
                     ON DELETE CASCADE,
 
-                INDEX idx_travel_user (user_id)
+                INDEX idx_travel_user (
+                    user_id
+                )
             )
             """
         )
@@ -543,6 +581,10 @@ def create_tables():
                 UNIQUE KEY unique_travel_day (
                     travel_plan_id,
                     day_number
+                ),
+
+                INDEX idx_travel_outfit_outfit (
+                    outfit_id
                 )
             )
             """
@@ -563,12 +605,24 @@ def create_tables():
         return True
 
     except Error as e:
-        print(f"\n❌ Failed to create tables:")
+        print()
+        print("❌ Failed to create tables:")
         print(e)
 
-        connection.rollback()
-        cursor.close()
-        connection.close()
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+        try:
+            connection.close()
+        except Exception:
+            pass
 
         return False
 
@@ -586,6 +640,10 @@ def create_demo_user():
     try:
         cursor = connection.cursor()
 
+        # ----------------------------------------------------
+        # Create Demo User
+        # ----------------------------------------------------
+
         cursor.execute(
             """
             INSERT INTO users (
@@ -601,9 +659,14 @@ def create_demo_user():
                 NULL
             )
             ON DUPLICATE KEY UPDATE
-                name = VALUES(name)
+                name = VALUES(name),
+                email = VALUES(email)
             """
         )
+
+        # ----------------------------------------------------
+        # Create Demo User Preferences
+        # ----------------------------------------------------
 
         cursor.execute(
             """
@@ -642,9 +705,83 @@ def create_demo_user():
     except Error as e:
         print(f"❌ Failed to create demo user: {e}")
 
-        connection.rollback()
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+        return False
+
+
+# ============================================================
+# VERIFY DATABASE
+# ============================================================
+
+def verify_database():
+    connection = connect_to_mysql(DB_NAME)
+
+    if not connection:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("SHOW TABLES")
+
+        tables = [
+            row[0]
+            for row in cursor.fetchall()
+        ]
+
+        expected_tables = [
+            "users",
+            "user_preferences",
+            "clothing_items",
+            "clothing_ai_analysis",
+            "outfits",
+            "outfit_items",
+            "outfit_feedback",
+            "outfit_history",
+            "virtual_try_on",
+            "travel_plans",
+            "travel_outfits",
+        ]
+
+        print()
+        print("Database verification:")
+        print()
+
+        all_exist = True
+
+        for table in expected_tables:
+            if table in tables:
+                print(f"  ✓ {table}")
+            else:
+                print(f"  ❌ {table} MISSING")
+                all_exist = False
+
         cursor.close()
         connection.close()
+
+        return all_exist
+
+    except Error as e:
+        print(f"❌ Database verification failed: {e}")
+
+        try:
+            connection.close()
+        except Exception:
+            pass
 
         return False
 
@@ -661,35 +798,68 @@ def main():
     print("==============================================")
     print()
 
+    # --------------------------------------------------------
+    # 1. Create database
+    # --------------------------------------------------------
+
     print("Creating database...")
 
     if not create_database():
-        print("\n❌ Migration stopped.")
+        print()
+        print("❌ Migration stopped.")
         return
+
+    # --------------------------------------------------------
+    # 2. Create tables
+    # --------------------------------------------------------
 
     print()
     print("Creating tables...")
     print()
 
     if not create_tables():
-        print("\n❌ Migration stopped.")
+        print()
+        print("❌ Migration stopped.")
         return
+
+    # --------------------------------------------------------
+    # 3. Create demo user
+    # --------------------------------------------------------
 
     print()
     print("Creating development user...")
 
     if not create_demo_user():
-        print("\n❌ Migration stopped.")
+        print()
+        print("❌ Migration stopped.")
         return
+
+    # --------------------------------------------------------
+    # 4. Verify
+    # --------------------------------------------------------
+
+    print()
+    print("Verifying database...")
+
+    if not verify_database():
+        print()
+        print("❌ Database verification failed.")
+        return
+
+    # --------------------------------------------------------
+    # Complete
+    # --------------------------------------------------------
 
     print()
     print("==============================================")
     print("      ✓ MIGRATION COMPLETED SUCCESSFULLY")
     print("==============================================")
     print()
-    print(f"Database : {DB_NAME}")
-    print("Demo User ID : 1")
+
+    print(f"Database      : {DB_NAME}")
+    print("Demo User ID  : 1")
     print()
+
     print("Tables created:")
     print("  1. users")
     print("  2. user_preferences")
@@ -705,5 +875,10 @@ def main():
     print()
 
 
+# ============================================================
+# RUN MIGRATION
+# ============================================================
+
 if __name__ == "__main__":
     main()
+

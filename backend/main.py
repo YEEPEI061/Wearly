@@ -1,4 +1,5 @@
 import os
+import math
 
 from fastapi import (
     FastAPI,
@@ -29,6 +30,7 @@ from outfit import (
     generate_outfits,
     generate_another_outfit,
     submit_feedback,
+    OUTFIT_PREVIEW_DIR,
 )
 from fastapi.staticfiles import StaticFiles
 
@@ -46,6 +48,12 @@ app.mount(
     "/processed",
     StaticFiles(directory=PROCESSED_DIR),
     name="processed",
+)
+
+app.mount(
+    "/outfit-previews",
+    StaticFiles(directory=OUTFIT_PREVIEW_DIR),
+    name="outfit-previews",
 )
 
 
@@ -164,6 +172,7 @@ class SaveClothingRequest(BaseModel):
     material: str
     image_path: str
     processed_image_path: str
+    ai_analysis: dict | None = None
 
 @app.post("/wardrobe")
 async def save_wardrobe_item(request: SaveClothingRequest):
@@ -179,6 +188,7 @@ async def save_wardrobe_item(request: SaveClothingRequest):
             material=request.material,
             image_path=request.image_path,
             processed_image_path=request.processed_image_path,
+            ai_analysis=request.ai_analysis,
         )
 
         reset_generated_outfits()
@@ -316,6 +326,25 @@ def debug_image(
 # -------------------------------------------------------------------
 # Outfit generation
 # -------------------------------------------------------------------
+def sanitize_json_value(value):
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return 0.0
+        return value
+
+    if isinstance(value, dict):
+        return {
+            key: sanitize_json_value(val)
+            for key, val in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            sanitize_json_value(item)
+            for item in value
+        ]
+
+    return value
 
 @app.post("/generate-outfit")
 def generate_outfit():
@@ -324,11 +353,15 @@ def generate_outfit():
         count=5
     )
 
+    outfits = sanitize_json_value(outfits)
+
+    print("🔥 FINAL OUTFIT IMAGE URL:")
+    print(outfits[0].get("image_url") if outfits else "NO OUTFITS")
+
     return {
         "success": True,
         "outfits": outfits,
     }
-
 
 @app.post("/generate-outfit/another")
 def another_outfit():
@@ -368,6 +401,9 @@ def outfit_feedback(
             outfit_id,
             request.feedback,
         )
+
+        result = sanitize_json_value(result)
+
 
         if result is None:
             raise HTTPException(

@@ -1,10 +1,10 @@
 // ignore_for_file: deprecated_member_use
-
 import 'package:flutter/material.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_page_header.dart';
+import 'package:frontend/services/api_service.dart';
 
 class StylistPage extends StatefulWidget {
   const StylistPage({super.key});
@@ -19,8 +19,6 @@ class _StylistPageState extends State<StylistPage>
   // RECOMMENDATION DATA
   // ============================================================
 
-  final String _outfitImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCfWgEl90E3ZhFYfWwCpCyaDZ7R1tR1xXbkjllcIapnkmoK9DM_HSQOP0zDJ3AGGzhOpHjI4WfHTuDPd_VVOWdcheiRgpD3CYFmDapBZ2OwB49J7HrYbjC8Hf0PKDseeacwv4OHpie5aK8N5D23EVFoT3HlxEnOBWMXsoonm7fyujSzrfZP3igw9xkYnFNwZ3xmLvsfV1Q80AMKlCVtia8laOWVfSyfH24qzlIdwRpT9sFLoHuaz_d5';
   final String _tryOnImage =
       'https://lh3.googleusercontent.com/aida-public/AB6AXuC2Ij6vuxhBGdF26K6qlz2ztH4EB0nVCWpBE1kFauAhoJxGVQJM3UaIbFe8B-zVVWoe_Ntijl9lmSBpE38R3jDysovsRi2lIf9Y19gFxOeemU4sHQD-vmty1fWQWgy6h8Z-vR7k2428Gbkj_R_BxmrhP_RNnLN1lJg03WR7ddmc9LQRCruGTtdF3fry5nAWy26V1eYvFgy7lloeOnFj6xr8P9cSTNF97cD7kpyUkeG7uPLOY_9fi55t';
 
@@ -30,46 +28,170 @@ class _StylistPageState extends State<StylistPage>
   bool _isAnimatingCard = false;
   bool _showTryOnResult = false;
 
+  List<Map<String, dynamic>> _recommendations = [];
+
+  int _selectedRecommendationIndex = 0;
+
+  Map<String, dynamic>? _recommendation;
+
+  bool _isLoadingRecommendation = true;
+
+  bool _isSubmittingFeedback = false;
+
+  String? _recommendationError;
+
   String _selectedOccasion = 'Evening';
   DateTime _selectedDate = DateTime(2024, 10, 24);
+
+  @override
+  void initState() {
+    super.initState();
+
+    _loadRecommendation();
+  }
+
+  Future<void> _loadRecommendation() async {
+    if (!mounted) return;
+
+    setState(() {
+      _recommendationError = null;
+      _isLoadingRecommendation = true;
+    });
+
+    try {
+      final response = await ApiService.generateOutfit();
+
+      if (!mounted) return;
+
+      final outfits = response['outfits'];
+
+      if (outfits == null || outfits is! List || outfits.isEmpty) {
+        setState(() {
+          _recommendationError =
+              'Not enough clothing items to generate an outfit.';
+          _isLoadingRecommendation = false;
+        });
+
+        return;
+      }
+
+      final recommendations = outfits
+          .map<Map<String, dynamic>>(
+            (outfit) => Map<String, dynamic>.from(outfit),
+          )
+          .toList();
+
+      setState(() {
+        _recommendations = recommendations;
+        _selectedRecommendationIndex = 0;
+        _recommendation = recommendations.first;
+        _isLoadingRecommendation = false;
+      });
+
+      print('✓ ${recommendations.length} outfit recommendations loaded');
+      print('CURRENT OUTFIT: $_recommendation');
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _recommendationError = e.toString();
+        _isLoadingRecommendation = false;
+      });
+
+      print('❌ Outfit recommendation failed: $e');
+    }
+  }
 
   // ============================================================
   // ACTIONS
   // ============================================================
 
-  void _handleLike() {
-    _animateRecommendation(true);
+  Future<void> _handleLike() async {
+    await _submitFeedback('LIKE');
   }
 
-  void _handleDislike() {
-    _animateRecommendation(false);
+  Future<void> _handleDislike() async {
+    await _submitFeedback('DISLIKE');
   }
 
-  void _animateRecommendation(bool liked) {
-    if (_isAnimatingCard) return;
+  Future<void> _submitFeedback(String feedback) async {
+    if (_recommendation == null) return;
+
+    if (_isSubmittingFeedback) return;
+
+    final String outfitId = _recommendation!['id']?.toString() ?? '';
+
+    if (outfitId.isEmpty) {
+      _showFeedbackError('This recommendation does not have a valid ID.');
+      return;
+    }
 
     setState(() {
-      _isAnimatingCard = true;
+      _isSubmittingFeedback = true;
     });
 
-    Future.delayed(const Duration(milliseconds: 450), () {
+    try {
+      await ApiService.sendOutfitFeedback(
+        outfitKey: [outfitId],
+        feedback: feedback,
+      );
+
       if (!mounted) return;
 
       setState(() {
-        _isAnimatingCard = false;
+        _isSubmittingFeedback = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            liked
+            feedback == 'LIKE'
                 ? 'Look saved to your preferences.'
                 : 'We will adjust future recommendations.',
           ),
-          duration: const Duration(milliseconds: 1200),
+          duration: const Duration(milliseconds: 1400),
         ),
       );
-    });
+
+      // ------------------------------------------------------------
+      // DISLIKE → MOVE TO NEXT EXISTING OUTFIT
+      // ------------------------------------------------------------
+
+      if (feedback == 'DISLIKE') {
+        if (_recommendations.isEmpty) {
+          return;
+        }
+
+        final nextIndex = _selectedRecommendationIndex + 1;
+
+        if (nextIndex < _recommendations.length) {
+          setState(() {
+            _selectedRecommendationIndex = nextIndex;
+            _recommendation = _recommendations[nextIndex];
+          });
+        } else {
+          // All currently loaded outfits have been viewed.
+          // Generate a new set of recommendations.
+          await _loadRecommendation();
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSubmittingFeedback = false;
+      });
+
+      _showFeedbackError('Unable to save feedback.');
+
+      print('❌ FEEDBACK ERROR: $e');
+    }
+  }
+
+  void _showFeedbackError(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _openTryOnModal() {
@@ -134,11 +256,21 @@ class _StylistPageState extends State<StylistPage>
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
                 child: Column(
                   children: [
-                    _buildIntro(),
-                    const SizedBox(height: 24),
-                    _buildRecommendationCard(),
-                    const SizedBox(height: 24),
-                    _buildScheduleButton(),
+                    if (_recommendationError != null)
+                      _buildRecommendationError()
+                    else if (_isLoadingRecommendation)
+                      _buildRecommendationLoading()
+                    else if (_recommendation != null) ...[
+                      _buildIntro(),
+
+                      const SizedBox(height: 24),
+
+                      _buildRecommendationCard(),
+
+                      const SizedBox(height: 24),
+
+                      _buildScheduleButton(),
+                    ],
                   ],
                 ),
               ),
@@ -154,6 +286,18 @@ class _StylistPageState extends State<StylistPage>
   // ============================================================
 
   Widget _buildIntro() {
+    final recommendation = _recommendation;
+
+    if (recommendation == null) {
+      return const SizedBox.shrink();
+    }
+
+    final score = (recommendation['score'] as num?)?.toDouble() ?? 0.0;
+
+    final matchPercentage = (score * 100).round();
+
+    final reason = recommendation['reason']?.toString() ?? '';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -162,14 +306,16 @@ class _StylistPageState extends State<StylistPage>
           children: [
             Expanded(
               child: Text(
-                'CURATED SESSION #042',
+                'AI OUTFIT RECOMMENDATION',
                 style: AppTextStyles.labelMedium.copyWith(
                   color: AppColors.primary,
                   letterSpacing: 1.5,
                 ),
               ),
             ),
+
             const SizedBox(width: 12),
+
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -177,7 +323,7 @@ class _StylistPageState extends State<StylistPage>
                 borderRadius: BorderRadius.circular(AppRadius.small),
               ),
               child: Text(
-                'MATCH: 98%',
+                'MATCH: $matchPercentage%',
                 style: AppTextStyles.labelSmall.copyWith(
                   color: AppColors.onSurfaceVariant,
                   letterSpacing: 0.8,
@@ -190,7 +336,7 @@ class _StylistPageState extends State<StylistPage>
         const SizedBox(height: 12),
 
         Text(
-          'The Modern Monolith Look',
+          'Your AI Curated Look',
           style: AppTextStyles.headlineMedium.copyWith(
             color: AppColors.primary,
           ),
@@ -199,7 +345,7 @@ class _StylistPageState extends State<StylistPage>
         const SizedBox(height: 8),
 
         Text(
-          'Tailored precisely for your upcoming evening symposium and minimalist silhouette preferences.',
+          reason,
           style: AppTextStyles.bodyMedium.copyWith(
             color: AppColors.onSurfaceVariant,
           ),
@@ -213,6 +359,16 @@ class _StylistPageState extends State<StylistPage>
   // ============================================================
 
   Widget _buildRecommendationCard() {
+    final recommendation = _recommendation;
+
+    if (recommendation == null) {
+      return const SizedBox.shrink();
+    }
+
+    final items = recommendation['items'] as List<dynamic>? ?? [];
+
+    final reason = recommendation['reason']?.toString() ?? '';
+
     return AnimatedSlide(
       duration: const Duration(milliseconds: 450),
       curve: Curves.easeOut,
@@ -222,8 +378,7 @@ class _StylistPageState extends State<StylistPage>
         opacity: _isAnimatingCard ? 0.15 : 1,
         child: Container(
           width: double.infinity,
-          height: 520,
-          clipBehavior: Clip.antiAlias,
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: AppColors.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(AppRadius.medium),
@@ -235,91 +390,139 @@ class _StylistPageState extends State<StylistPage>
               ),
             ],
           ),
-          child: Stack(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Positioned.fill(
-                child: Image.network(
-                  _outfitImage,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
+              _buildRecommendedClothing(items),
 
-                    return const Center(child: CircularProgressIndicator());
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    print('IMAGE ERROR: $error');
+              const SizedBox(height: 20),
 
-                    return const Center(
-                      child: Icon(Icons.broken_image_outlined, size: 64),
-                    );
-                  },
+              Text(
+                'LOOK BREAKDOWN',
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: AppColors.primary,
+                  letterSpacing: 1.5,
                 ),
               ),
 
-              // Dark gradient
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppColors.primary.withOpacity(0.05),
-                        AppColors.primary.withOpacity(0.15),
-                        AppColors.primary.withOpacity(0.92),
-                      ],
-                      stops: const [0.0, 0.45, 1.0],
-                    ),
-                  ),
+              const SizedBox(height: 6),
+
+              Text(
+                'AI Curated Outfit',
+                style: AppTextStyles.headlineMedium.copyWith(
+                  color: AppColors.primary,
                 ),
               ),
 
-              // Bottom content
-              Positioned(
-                left: 24,
-                right: 24,
-                bottom: 24,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'LOOK BREAKDOWN',
-                      style: AppTextStyles.labelSmall.copyWith(
-                        color: AppColors.primaryDim,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
+              const SizedBox(height: 8),
 
-                    const SizedBox(height: 6),
-
-                    Text(
-                      'Double-Breasted Wool Blazer & Pleated Trousers',
-                      style: AppTextStyles.headlineMedium.copyWith(
-                        color: AppColors.white,
-                      ),
-                    ),
-
-                    const SizedBox(height: 6),
-
-                    Text(
-                      'Structured shoulders elongate your frame while the fluid trousers create an effortless drape. Ideal for cooler evening settings.',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.surfaceContainerHigh,
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    _buildRecommendationActions(),
-                  ],
+              Text(
+                reason,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.onSurfaceVariant,
                 ),
               ),
+
+              const SizedBox(height: 18),
+
+              _buildRecommendationActions(),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRecommendedClothing(List<dynamic> items) {
+    if (_recommendations.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 350,
+          child: PageView.builder(
+            itemCount: _recommendations.length,
+            onPageChanged: (index) {
+              setState(() {
+                _selectedRecommendationIndex = index;
+                _recommendation = _recommendations[index];
+              });
+            },
+            itemBuilder: (context, index) {
+              final recommendation = _recommendations[index];
+
+              final imagePath = recommendation['image_url']?.toString();
+
+              if (imagePath == null || imagePath.isEmpty) {
+                return const Center(
+                  child: Icon(
+                    Icons.checkroom_outlined,
+                    size: 48,
+                    color: AppColors.outline,
+                  ),
+                );
+              }
+
+              final imageUrl = '${ApiService.baseUrl}$imagePath';
+
+              print('🖼️ Outfit preview URL: $imageUrl');
+
+              return Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(AppRadius.large),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    print('❌ Failed to load outfit preview:');
+                    print(imageUrl);
+                    print(error);
+
+                    return const Center(
+                      child: Icon(
+                        Icons.checkroom_outlined,
+                        size: 48,
+                        color: AppColors.outline,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        _buildRecommendationIndicator(),
+      ],
+    );
+  }
+
+  Widget _buildRecommendationIndicator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(_recommendations.length, (index) {
+        final isSelected = index == _selectedRecommendationIndex;
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: isSelected ? 22 : 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : AppColors.outlineVariant,
+            borderRadius: BorderRadius.circular(10),
+          ),
+        );
+      }),
     );
   }
 
@@ -1153,6 +1356,110 @@ class _StylistPageState extends State<StylistPage>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRecommendationError() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 60, bottom: 60),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.checkroom_outlined,
+            size: 56,
+            color: AppColors.outline,
+          ),
+
+          const SizedBox(height: 20),
+
+          Text(
+            'Unable to Create an Outfit',
+            style: AppTextStyles.headlineMedium.copyWith(
+              color: AppColors.primary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            _recommendationError ?? 'Something went wrong.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          ElevatedButton(
+            onPressed: _loadRecommendation,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.white,
+            ),
+            child: const Text('TRY AGAIN'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecommendationLoading() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 100, bottom: 100),
+      child: Column(
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.10),
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          Text(
+            'Creating Your Look',
+            style: AppTextStyles.headlineMedium.copyWith(
+              color: AppColors.primary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            'AI is analysing your wardrobe and creating outfit recommendations.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          Text(
+            'THIS MAY TAKE A MOMENT',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.onSurfaceVariant,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

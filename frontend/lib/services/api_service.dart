@@ -186,10 +186,16 @@ class ApiService {
     required List<String> outfitKey,
     required String feedback,
   }) async {
+    if (outfitKey.isEmpty) {
+      throw Exception('Outfit ID is missing.');
+    }
+
+    final outfitId = outfitKey.first;
+
     final response = await http.post(
-      Uri.parse('$baseUrl/outfit-feedback'),
+      Uri.parse('$baseUrl/outfit/$outfitId/feedback'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'outfit_key': outfitKey, 'feedback': feedback}),
+      body: jsonEncode({'feedback': feedback}),
     );
 
     if (response.statusCode != 200) {
@@ -225,6 +231,17 @@ class ApiService {
         'material': material,
         'image_path': item.imagePath,
         'processed_image_path': item.processedImagePath,
+
+        // AI analysis
+        'ai_analysis': {
+          'category': item.detectedCategory,
+          'category_confidence': item.categoryConfidence,
+          'color': item.detectedColor,
+          'color_confidence': item.colorConfidence,
+          'style': item.detectedStyle,
+          'style_confidence': item.styleConfidence,
+          'analysis_version': item.analysisVersion,
+        },
       }),
     );
 
