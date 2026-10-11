@@ -680,10 +680,13 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
                     const SizedBox(height: 24),
                     _buildItemDetails(),
                     const SizedBox(height: 24),
-                    if (widget.isNewItem)
-                      _buildSaveButton()
-                    else
+                    if (widget.isNewItem) ...[
+                      _buildSaveButton(),
+                    ] else ...[
+                      _buildUpdateButton(),
+                      const SizedBox(height: 12),
                       _buildDeleteButton(),
+                    ],
                   ],
                 ),
               ),
@@ -1445,6 +1448,37 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
     }
   }
 
+  Future<void> _updateItem() async {
+    final item = widget.item;
+
+    if (item == null) {
+      _showError('Unable to update this clothing item.');
+      return;
+    }
+
+    try {
+      await ApiService.updateClothingItem(
+        id: item.id,
+        name: _title,
+        brand: _brand,
+        category: _category,
+        color: _colorway,
+        style: _style,
+        material: _material,
+      );
+
+      if (!mounted) return;
+
+      _showTopSuccessMessage('Clothing item updated.');
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+
+      _showError(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   void _showTopSuccessMessage(String message) {
     final overlay = Overlay.of(context);
 
@@ -1512,5 +1546,31 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
         overlayEntry.remove();
       }
     });
+  }
+
+  Widget _buildUpdateButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton.icon(
+        onPressed: _updateItem,
+        icon: const Icon(Icons.check, size: 20),
+        label: Text(
+          'UPDATE CLOTHING',
+          style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.white,
+            letterSpacing: 1.0,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+          ),
+        ),
+      ),
+    );
   }
 }

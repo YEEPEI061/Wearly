@@ -14,7 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from database.db import get_connection
 
-from database.clothing import create_clothing_item
+from database.clothing import (
+    create_clothing_item,
+    update_clothing_item,
+)
 from database.outfit import (
     submit_outfit_feedback,
 )
@@ -207,7 +210,55 @@ async def save_wardrobe_item(request: SaveClothingRequest):
             status_code=500,
             detail=str(e),
         )
-    
+
+class UpdateClothingRequest(BaseModel):
+    name: str
+    brand: str
+    category: str
+    color: str
+    style: str
+    material: str
+
+@app.put("/wardrobe/{clothing_id}")
+async def update_wardrobe_item(
+    clothing_id: int,
+    request: UpdateClothingRequest,
+):
+    try:
+        success = update_clothing_item(
+            clothing_id=clothing_id,
+            user_id=1,
+            name=request.name,
+            brand=request.brand,
+            category=request.category,
+            color=request.color,
+            style=request.style,
+            material=request.material,
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail="Clothing item not found.",
+            )
+
+        reset_generated_outfits()
+
+        return {
+            "success": True,
+            "message": "Clothing item updated successfully.",
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        print(f"❌ Failed to update clothing: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+     
 @app.post("/process-clothing")
 async def process_clothing_route(
     file: UploadFile = File(...),

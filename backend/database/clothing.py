@@ -191,3 +191,61 @@ def get_clothing_items(
     finally:
         cursor.close()
         connection.close()
+
+
+def update_clothing_item(
+    clothing_id: int,
+    user_id: int,
+    name: str,
+    brand: str,
+    category: str,
+    color: str,
+    style: str,
+    material: str,
+):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+        query = """
+            UPDATE clothing_items
+            SET
+                name = %s,
+                brand = %s,
+                category = %s,
+                color = %s,
+                style = %s,
+                material = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+              AND user_id = %s
+              AND is_active = 1
+        """
+
+        values = (
+            name,
+            brand,
+            category,
+            color,
+            style,
+            material,
+            clothing_id,
+            user_id,
+        )
+
+        cursor.execute(query, values)
+
+        if cursor.rowcount == 0:
+            connection.rollback()
+            return False
+
+        connection.commit()
+        return True
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        connection.close()

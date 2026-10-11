@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:frontend/models/clothing_item.dart';
+import 'package:frontend/pages/clothing_detail_page.dart';
 import 'package:frontend/services/api_service.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
@@ -83,10 +84,19 @@ class _WardrobePageState extends State<WardrobePage> {
     }
   }
 
-  void _openItem(String name) {
-    ScaffoldMessenger.of(
+  Future<void> _openItem(ClothingItem item) async {
+    final updated = await Navigator.push<bool>(
       context,
-    ).showSnackBar(SnackBar(content: Text('$name will open here.')));
+      MaterialPageRoute(
+        builder: (_) => ClothingDetailPage(item: item, isNewItem: false),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (updated == true) {
+      await _loadWardrobe();
+    }
   }
 
   List<ClothingItem> get _filteredItems {
@@ -422,7 +432,7 @@ class _WardrobePageState extends State<WardrobePage> {
 
   Widget _buildStandardCard(ClothingItem item) {
     return GestureDetector(
-      onTap: () => _openItem(item.name),
+      onTap: () => _openItem(item),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(

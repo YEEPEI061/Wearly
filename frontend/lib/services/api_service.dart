@@ -182,38 +182,26 @@ class ApiService {
   // OUTFIT FEEDBACK
   // ========================================================
 
-static Future<Map<String, dynamic>> sendOutfitFeedback({
-  required String outfitId,
-  required String feedback,
-}) async {
-  if (outfitId.isEmpty) {
-    throw Exception(
-      'Outfit ID is missing.',
+  static Future<Map<String, dynamic>> sendOutfitFeedback({
+    required String outfitId,
+    required String feedback,
+  }) async {
+    if (outfitId.isEmpty) {
+      throw Exception('Outfit ID is missing.');
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/outfit/$outfitId/feedback'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'feedback': feedback}),
     );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to save outfit feedback: ${response.body}');
+    }
+
+    return jsonDecode(response.body);
   }
-
-  final response = await http.post(
-    Uri.parse(
-      '$baseUrl/outfit/$outfitId/feedback',
-    ),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: jsonEncode({
-      'feedback': feedback,
-    }),
-  );
-
-  if (response.statusCode != 200) {
-    throw Exception(
-      'Failed to save outfit feedback: ${response.body}',
-    );
-  }
-
-  return jsonDecode(
-    response.body,
-  );
-}
 
   // ========================================================
   // SAVE CLOTHING ITEM
@@ -262,5 +250,36 @@ static Future<Map<String, dynamic>> sendOutfitFeedback({
     final data = jsonDecode(response.body);
 
     return ClothingItem.fromJson(data['item']);
+  }
+
+  // ========================================================
+  // UPDATE CLOTHING ITEM
+  // ========================================================
+
+  static Future<void> updateClothingItem({
+    required String id,
+    required String name,
+    required String brand,
+    required String category,
+    required String color,
+    required String style,
+    required String material,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/wardrobe/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name,
+        'brand': brand,
+        'category': category,
+        'color': color,
+        'style': style,
+        'material': material,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update clothing item: ${response.body}');
+    }
   }
 }
