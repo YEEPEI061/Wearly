@@ -182,28 +182,38 @@ class ApiService {
   // OUTFIT FEEDBACK
   // ========================================================
 
-  static Future<Map<String, dynamic>> sendOutfitFeedback({
-    required List<String> outfitKey,
-    required String feedback,
-  }) async {
-    if (outfitKey.isEmpty) {
-      throw Exception('Outfit ID is missing.');
-    }
-
-    final outfitId = outfitKey.first;
-
-    final response = await http.post(
-      Uri.parse('$baseUrl/outfit/$outfitId/feedback'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'feedback': feedback}),
+static Future<Map<String, dynamic>> sendOutfitFeedback({
+  required String outfitId,
+  required String feedback,
+}) async {
+  if (outfitId.isEmpty) {
+    throw Exception(
+      'Outfit ID is missing.',
     );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to save outfit feedback: ${response.body}');
-    }
-
-    return jsonDecode(response.body);
   }
+
+  final response = await http.post(
+    Uri.parse(
+      '$baseUrl/outfit/$outfitId/feedback',
+    ),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({
+      'feedback': feedback,
+    }),
+  );
+
+  if (response.statusCode != 200) {
+    throw Exception(
+      'Failed to save outfit feedback: ${response.body}',
+    );
+  }
+
+  return jsonDecode(
+    response.body,
+  );
+}
 
   // ========================================================
   // SAVE CLOTHING ITEM

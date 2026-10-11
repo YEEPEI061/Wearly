@@ -15,6 +15,9 @@ from pydantic import BaseModel
 from database.db import get_connection
 
 from database.clothing import create_clothing_item
+from database.outfit import (
+    submit_outfit_feedback,
+)
 from wardrobe import (
     PROCESSED_DIR,
     UPLOAD_DIR,
@@ -391,19 +394,20 @@ def another_outfit():
     "/outfit/{outfit_id}/feedback"
 )
 def outfit_feedback(
-    outfit_id: str,
+    outfit_id: int,
     request: OutfitFeedbackRequest,
 ):
 
     try:
 
-        result = submit_feedback(
-            outfit_id,
-            request.feedback,
+        result = submit_outfit_feedback(
+            outfit_id=outfit_id,
+            feedback=request.feedback,
         )
 
-        result = sanitize_json_value(result)
-
+        result = sanitize_json_value(
+            result
+        )
 
         if result is None:
             raise HTTPException(
@@ -423,7 +427,7 @@ def outfit_feedback(
             detail=str(e),
         )
 
-
+    
 # ============================================================
 # LIGHTWEIGHT CATEGORY DETECTION
 # ============================================================

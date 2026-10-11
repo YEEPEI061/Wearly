@@ -293,3 +293,200 @@ def find_existing_outfit(
     finally:
         cursor.close()
         connection.close()
+
+def submit_outfit_feedback(
+    outfit_id: int,
+    feedback: str,
+    user_id: int = 1,
+):
+    feedback = (
+        feedback or ""
+    ).upper().strip()
+
+    if feedback not in {
+        "LIKE",
+        "DISLIKE",
+    }:
+        raise ValueError(
+            "Feedback must be LIKE or DISLIKE."
+        )
+
+    connection = get_connection()
+    cursor = connection.cursor(
+        dictionary=True
+    )
+
+    try:
+        # ========================================================
+        # 1. Check that outfit exists
+        # ========================================================
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                user_id,
+                title,
+                recommendation_score,
+                image_url
+            FROM outfits
+            WHERE id = %s
+              AND user_id = %s
+            LIMIT 1
+            """,
+            (
+                outfit_id,
+                user_id,
+            ),
+        )
+
+        outfit = cursor.fetchone()
+
+        if outfit is None:
+            return None
+
+        # ========================================================
+        # 2. Insert / update feedback
+        # ========================================================
+
+        cursor.execute(
+            """
+            INSERT INTO outfit_feedback (
+                user_id,
+                outfit_id,
+                feedback
+            )
+            VALUES (
+                %s,
+                %s,
+                %s
+            )
+            ON DUPLICATE KEY UPDATE
+                feedback = VALUES(feedback)
+            """,
+            (
+                user_id,
+                outfit_id,
+                feedback,
+            ),
+        )
+
+        connection.commit()
+
+        outfit["feedback"] = feedback
+
+        return outfit
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def get_feedback_preferences(
+    user_id: int = 1,
+):
+    connection = get_connection()
+    cursor = connection.cursor(
+        dictionary=True
+    )
+
+    try:
+        query = """
+            SELECT
+                ci.style,
+                ci.color,
+                ofb.feedback
+
+            FROM outfit_feedback ofb
+
+            INNER JOIN outfit_items oi
+                ON oi.outfit_id = ofb.outfit_id
+
+            INNER JOIN clothing_items ci
+                ON ci.id = oi.clothing_id
+
+            WHERE ofb.user_id = %s
+              AND ci.is_active = 1
+        """
+
+        cursor.execute(
+            query,
+            (user_id,),
+        )
+
+        rows = cursor.fetchall()
+
+        preferences = {
+            "preferred_styles": {},
+            "preferred_colors": {},
+            "disliked_styles": {},
+            "disliked_colors": {},
+        }
+
+        for row in rows:
+
+            style = (
+                row.get("style") or ""
+            ).lower().strip()
+
+            color = (
+                row.get("color") or ""
+            ).lower().strip()
+
+            feedback = row.get(
+                "feedback"
+            )
+
+            if feedback == "LIKE":
+
+                if style:
+                    preferences[
+                        "preferred_styles"
+                    ][style] = (
+                        preferences[
+                            "preferred_styles"
+                        ].get(style, 0)
+                        + 1
+                    )
+
+                if color:
+                    preferences[
+                        "preferred_colors"
+                    ][color] = (
+                        preferences[
+                            "preferred_colors"
+                        ].get(color, 0)
+                        + 1
+                    )
+
+            elif feedback == "DISLIKE":
+
+                if style:
+                    preferences[
+                        "disliked_styles"
+                    ][style] = (
+                        preferences[
+                            "disliked_styles"
+                        ].get(style, 0)
+                        + 1
+                    )
+
+                if color:
+                    preferences[
+                        "disliked_colors"
+                    ][color] = (
+                        preferences[
+                            "disliked_colors"
+                        ].get(color, 0)
+                        + 1
+                    )
+
+        return preferences
+
+    finally:
+        cursor.close()
+        connection.close()

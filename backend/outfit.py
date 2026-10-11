@@ -12,11 +12,12 @@ from ai_service import (
     compare_embeddings,
 )
 from database.clothing import get_clothing_items
-from database.outfit import save_generated_outfits
 from database.outfit import (
     save_generated_outfits,
     update_outfit_preview,
     find_existing_outfit,
+    submit_outfit_feedback,
+    get_feedback_preferences,
 )
 from database.db import get_connection
 
@@ -502,57 +503,101 @@ def calculate_pair_score(item_a, item_b):
 
 def personalization_bonus(
     outfit: Dict,
+    preferences: Dict,
 ) -> float:
-
-    preferences = load_preferences()
 
     bonus = 0.0
 
     preferred_styles = preferences.get(
         "preferred_styles",
-        [],
+        {},
     )
 
     preferred_colors = preferences.get(
         "preferred_colors",
-        [],
+        {},
     )
 
     disliked_styles = preferences.get(
         "disliked_styles",
-        [],
+        {},
     )
 
     disliked_colors = preferences.get(
         "disliked_colors",
-        [],
+        {},
     )
 
     for item in outfit["items"]:
 
-        style = item.get(
-            "style",
-            "",
-        ).lower()
+        style = (
+            item.get("style") or ""
+        ).lower().strip()
 
-        color = item.get(
-            "color",
-            "",
-        ).lower()
+        color = (
+            item.get("color") or ""
+        ).lower().strip()
 
-        if style in preferred_styles:
-            bonus += 0.05
+        # ========================================================
+        # Positive feedback
+        # ========================================================
 
-        if color in preferred_colors:
-            bonus += 0.05
+        style_likes = preferred_styles.get(
+            style,
+            0,
+        )
 
-        if style in disliked_styles:
-            bonus -= 0.10
+        color_likes = preferred_colors.get(
+            color,
+            0,
+        )
 
-        if color in disliked_colors:
-            bonus -= 0.10
+        # ========================================================
+        # Negative feedback
+        # ========================================================
 
-    return bonus
+        style_dislikes = disliked_styles.get(
+            style,
+            0,
+        )
+
+        color_dislikes = disliked_colors.get(
+            color,
+            0,
+        )
+
+        # ========================================================
+        # Apply weighted personalisation
+        # ========================================================
+
+        bonus += min(
+            style_likes * 0.02,
+            0.06,
+        )
+
+        bonus += min(
+            color_likes * 0.02,
+            0.06,
+        )
+
+        bonus -= min(
+            style_dislikes * 0.03,
+            0.09,
+        )
+
+        bonus -= min(
+            color_dislikes * 0.03,
+            0.09,
+        )
+
+    # ============================================================
+    # Prevent personalisation from overwhelming compatibility
+    # ============================================================
+
+    return max(
+        -0.20,
+        min(0.20, bonus),
+    )
 
 # -------------------------------------------------------------------
 # Outfit preview image
@@ -925,6 +970,8 @@ def generate_outfits(
     if len(wardrobe) < 2:
         return []
 
+    preferences = get_feedback_preferences()
+
     upper = [
         item
         for item in wardrobe
@@ -961,11 +1008,42 @@ def generate_outfits(
             "items": [dress],
         }
 
-        score = 0.75
+        base_score = 0.75
 
-        score += personalization_bonus(
-            outfit
+        personalization = personalization_bonus(
+            outfit,
+            preferences,
         )
+
+        score = base_score + personalization
+
+        score = min(
+            1.0,
+            max(0.0, score),
+        )
+
+        print("========================================")
+        print("🧠 PERSONALIZATION")
+        print(
+            "Outfit:",
+            [
+                item.get("id")
+                for item in outfit["items"]
+            ],
+        )
+        print(
+            "Base score:",
+            round(base_score, 4),
+        )
+        print(
+            "Personalization bonus:",
+            f"{personalization:+.4f}",
+        )
+        print(
+            "Final score:",
+            round(score, 4),
+        )
+        print("========================================")
 
         candidates.append({
             "items": [dress],
@@ -1000,17 +1078,42 @@ def generate_outfits(
                 ],
             }
 
-            score = (
-                scores["score"]
-                + personalization_bonus(
-                    outfit
-                )
+            base_score = scores["score"]
+
+            personalization = personalization_bonus(
+                outfit,
+                preferences,
             )
+
+            score = base_score + personalization
 
             score = min(
                 1.0,
                 max(0.0, score),
             )
+
+            print("========================================")
+            print("🧠 PERSONALIZATION")
+            print(
+                "Outfit:",
+                [
+                    item.get("id")
+                    for item in outfit["items"]
+                ],
+            )
+            print(
+                "Base score:",
+                round(base_score, 4),
+            )
+            print(
+                "Personalization bonus:",
+                f"{personalization:+.4f}",
+            )
+            print(
+                "Final score:",
+                round(score, 4),
+            )
+            print("========================================")
 
             reason = (
                 f"{top.get('style', 'casual').title()} "
@@ -1118,11 +1221,9 @@ def generate_outfits(
                 "image_url": existing_outfit.get(
                     "image_url"
                 ),
-                "score": float(
-                    existing_outfit.get(
-                        "recommendation_score",
-                        candidate["score"],
-                    )
+                "score": round(
+                    candidate["score"],
+                    4,
                 ),
                 "reason": candidate["reason"],
                 "score_breakdown": candidate.get(
@@ -1263,135 +1364,30 @@ def generate_another_outfit() -> Optional[Dict]:
 # -------------------------------------------------------------------
 # Feedback
 # -------------------------------------------------------------------
-
 def submit_feedback(
-    outfit_id: str,
+    outfit_id: int,
     feedback: str,
 ) -> Optional[Dict]:
 
-    feedback = feedback.upper()
+    result = submit_outfit_feedback(
+        outfit_id=outfit_id,
+        feedback=feedback,
+    )
 
-    if feedback not in (
-        "LIKE",
-        "DISLIKE",
-    ):
-        raise ValueError(
-            "Feedback must be LIKE or DISLIKE."
-        )
-
-    outfits = load_generated_outfits()
-
-    outfit = None
-
-    for item in outfits:
-        if str(item["id"]) == str(
-            outfit_id
-        ):
-            outfit = item
-            break
-
-    if outfit is None:
+    if result is None:
         return None
 
-    preferences = load_preferences()
-
-    preferences.setdefault(
-        "preferred_styles",
-        [],
+    print(
+        "========================================"
+    )
+    print(
+        "FEEDBACK RESULT"
+    )
+    print(
+        result
+    )
+    print(
+        "========================================"
     )
 
-    preferences.setdefault(
-        "preferred_colors",
-        [],
-    )
-
-    preferences.setdefault(
-        "disliked_styles",
-        [],
-    )
-
-    preferences.setdefault(
-        "disliked_colors",
-        [],
-    )
-
-    if feedback == "LIKE":
-
-        for item in outfit["items"]:
-
-            style = item.get(
-                "style"
-            )
-
-            color = item.get(
-                "color"
-            )
-
-            if (
-                style
-                and style not in preferences[
-                    "preferred_styles"
-                ]
-            ):
-                preferences[
-                    "preferred_styles"
-                ].append(style)
-
-            if (
-                color
-                and color not in preferences[
-                    "preferred_colors"
-                ]
-            ):
-                preferences[
-                    "preferred_colors"
-                ].append(color)
-
-    else:
-
-        for item in outfit["items"]:
-
-            style = item.get(
-                "style"
-            )
-
-            color = item.get(
-                "color"
-            )
-
-            if (
-                style
-                and style not in preferences[
-                    "disliked_styles"
-                ]
-            ):
-                preferences[
-                    "disliked_styles"
-                ].append(style)
-
-            if (
-                color
-                and color not in preferences[
-                    "disliked_colors"
-                ]
-            ):
-                preferences[
-                    "disliked_colors"
-                ].append(color)
-
-    save_preferences(
-        preferences
-    )
-
-    outfit["feedback"] = feedback
-
-    save_generated_outfits(
-        outfits
-    )
-
-    print("========================================")
-    print("FEEDBACK RESULT")
-    print(outfit)
-    print("========================================")
-
-    return outfit
+    return result

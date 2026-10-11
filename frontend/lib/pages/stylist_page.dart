@@ -132,7 +132,7 @@ class _StylistPageState extends State<StylistPage>
 
     try {
       await ApiService.sendOutfitFeedback(
-        outfitKey: [outfitId],
+        outfitId: outfitId,
         feedback: feedback,
       );
 
