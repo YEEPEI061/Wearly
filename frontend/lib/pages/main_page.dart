@@ -17,18 +17,33 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = const [
-    HomePage(),
-    WardrobePage(),
-    StylistStartPage(),
-    HistoryPage(),
-    ProfilePage(),
-  ];
+  final GlobalKey<HistoryPageState> _historyKey = GlobalKey<HistoryPageState>();
+
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _pages = [
+      const HomePage(),
+      const WardrobePage(),
+      const StylistStartPage(),
+      HistoryPage(key: _historyKey),
+      const ProfilePage(),
+    ];
+  }
 
   void _onBottomNavTap(int index) {
     setState(() {
       _selectedIndex = index;
     });
+
+    if (index == 3) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _historyKey.currentState?.resetToToday();
+      });
+    }
   }
 
   @override

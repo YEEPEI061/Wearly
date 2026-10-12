@@ -14,8 +14,8 @@ class ApiService {
   // Physical Android phone
   static const String baseUrl = 'http://192.168.1.58:8000';
 
-  // Android emulator
-  // static const String baseUrl = 'http://10.0.2.2:8000';
+  // College
+  // static const String baseUrl = 'http://172.18.52.160:8000';
 
   // ========================================================
   // PROCESS CLOTHING
@@ -130,14 +130,17 @@ class ApiService {
   }
 
   // ========================================================
-  // DELETE CLOTHING
+  // DELETE / REMOVE CLOTHING ITEM
   // ========================================================
 
-  static Future<void> deleteClothing(String id) async {
+  static Future<void> deleteClothingItem({required String id}) async {
     final response = await http.delete(Uri.parse('$baseUrl/wardrobe/$id'));
 
+    print('DELETE CLOTHING STATUS: ${response.statusCode}');
+    print('DELETE CLOTHING RESPONSE: ${response.body}');
+
     if (response.statusCode != 200) {
-      throw Exception('Failed to delete clothing: ${response.body}');
+      throw Exception('Failed to remove clothing item: ${response.body}');
     }
   }
 
@@ -176,6 +179,41 @@ class ApiService {
     }
 
     return jsonDecode(response.body);
+  }
+
+  // ========================================================
+  // GENERATE RECORD OUTFIT PREVIEW
+  // ========================================================
+
+  static Future<String> generateRecordOutfitPreview({
+    required List<String> itemIds,
+  }) async {
+    if (itemIds.isEmpty) {
+      throw Exception('No clothing items selected.');
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/record-outfit-preview'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'item_ids': itemIds}),
+    );
+
+    print('RECORD OUTFIT PREVIEW STATUS: ${response.statusCode}');
+    print('RECORD OUTFIT PREVIEW RESPONSE: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to generate outfit preview: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+
+    final imageUrl = data['image_url']?.toString();
+
+    if (imageUrl == null || imageUrl.isEmpty) {
+      throw Exception('Backend did not return an outfit preview image.');
+    }
+
+    return imageUrl;
   }
 
   // ========================================================
@@ -280,6 +318,36 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception('Failed to update clothing item: ${response.body}');
+    }
+  }
+
+  static Future<void> saveOutfitHistory({
+    required List<String> itemIds,
+    required DateTime wornDate,
+    required String notes,
+  }) async {
+    if (itemIds.isEmpty) {
+      throw Exception('Please select at least one clothing item.');
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/outfit-history'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'item_ids': itemIds,
+        'worn_date':
+            '${wornDate.year.toString().padLeft(4, '0')}-'
+            '${wornDate.month.toString().padLeft(2, '0')}-'
+            '${wornDate.day.toString().padLeft(2, '0')}',
+        'notes': notes,
+      }),
+    );
+
+    print('SAVE OUTFIT HISTORY STATUS: ${response.statusCode}');
+    print('SAVE OUTFIT HISTORY RESPONSE: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to save outfit history: ${response.body}');
     }
   }
 }

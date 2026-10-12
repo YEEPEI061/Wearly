@@ -571,13 +571,28 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
               child: const Text('CANCEL'),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
+              onPressed: () async {
                 Navigator.pop(context);
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Clothing item removed.')),
-                );
+                final item = widget.item;
+
+                if (item == null) {
+                  _showError('Unable to remove this clothing item.');
+                  return;
+                }
+
+                try {
+                  await ApiService.deleteClothingItem(id: item.id);
+
+                  if (!mounted) return;
+
+                  // Return to WardrobePage and tell it to reload.
+                  Navigator.pop(context, 'deleted');
+                } catch (e) {
+                  if (!mounted) return;
+
+                  _showError(e.toString().replaceFirst('Exception: ', ''));
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -1469,9 +1484,9 @@ class _ClothingDetailPageState extends State<ClothingDetailPage> {
 
       if (!mounted) return;
 
-      _showTopSuccessMessage('Clothing item updated.');
+      // _showTopSuccessMessage('Clothing item updated.');
 
-      Navigator.pop(context, true);
+      Navigator.pop(context, 'updated');
     } catch (e) {
       if (!mounted) return;
 

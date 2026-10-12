@@ -1188,7 +1188,7 @@ def create_processed_image(
         )
 
     # ---------------------------------------------------------------
-    # Consistent Wearly canvas
+    # Transparent Wearly canvas
     # ---------------------------------------------------------------
 
     canvas_size = 1000
@@ -1200,10 +1200,10 @@ def create_processed_image(
             canvas_size,
         ),
         (
-            248,
-            247,
-            244,
-            255,
+            0,
+            0,
+            0,
+            0,
         ),
     )
 
@@ -1233,12 +1233,9 @@ def create_processed_image(
         ),
     )
 
-    background.convert(
-        "RGB"
-    ).save(
+    background.save(
         output_path,
-        "JPEG",
-        quality=95,
+        "PNG",
     )
 
     return {

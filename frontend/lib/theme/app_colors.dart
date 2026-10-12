@@ -18,7 +18,7 @@ class AppColors {
   // BACKGROUND / SURFACE
   // ============================================================
 
-  static const Color background = Color(0xFFFAF9F5);
+  static const Color background = Color(0xFFF8F7F4);
   static const Color surfaceContainerLow = Color(0xFFF5F4F0);
   static const Color surfaceContainerMedium = Color(0xFFEFEEEA);
   static const Color surfaceContainerHigh = Color(0xFFE9E8E4);

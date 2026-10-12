@@ -739,10 +739,10 @@ def create_outfit_preview(
                 1000,
             ),
             (
-                248,
-                247,
-                244,
-                255,
+                0,
+                0,
+                0,
+                0,
             ),
         )
 
@@ -832,10 +832,10 @@ def create_outfit_preview(
                 800,
             ),
             (
-                248,
-                247,
-                244,
-                255,
+                0,
+                0,
+                0,
+                0,
             ),
         )
 
@@ -900,7 +900,7 @@ def create_outfit_preview(
     # ---------------------------------------------------------------
 
     filename = (
-        f"{outfit_id}.jpg"
+        f"{outfit_id}.png"
     )
 
     output_path = os.path.join(
@@ -908,12 +908,9 @@ def create_outfit_preview(
         filename,
     )
 
-    canvas.convert(
-        "RGB"
-    ).save(
+    canvas.save(
         output_path,
-        "JPEG",
-        quality=95,
+        "PNG",
     )
 
     print(
@@ -929,8 +926,10 @@ def cleanup_old_outfit_previews(
 ):
     files = []
 
-    for filename in os.listdir(OUTFIT_PREVIEW_DIR):
-        if not filename.lower().endswith(".jpg"):
+    for filename in os.listdir(
+        OUTFIT_PREVIEW_DIR
+    ):
+        if not filename.lower().endswith(".png"):
             continue
 
         path = os.path.join(
@@ -946,12 +945,72 @@ def cleanup_old_outfit_previews(
         reverse=True,
     )
 
+    # -------------------------------------------------------
+    # Get preview filenames currently referenced by MySQL
+    # -------------------------------------------------------
+
+    referenced_previews = set()
+
+    connection = get_connection()
+    cursor = connection.cursor(
+        dictionary=True
+    )
+
+    try:
+        cursor.execute(
+            """
+            SELECT image_url
+            FROM outfits
+            WHERE image_url IS NOT NULL
+              AND image_url != ''
+            """
+        )
+
+        rows = cursor.fetchall()
+
+        for row in rows:
+            image_url = row.get("image_url")
+
+            if not image_url:
+                continue
+
+            filename = os.path.basename(
+                image_url
+            )
+
+            if filename:
+                referenced_previews.add(
+                    filename
+                )
+
+    finally:
+        cursor.close()
+        connection.close()
+
+    # -------------------------------------------------------
+    # Remove old files
+    #
+    # Never delete a preview that is still referenced
+    # by an outfit in MySQL.
+    # -------------------------------------------------------
+
     for path in files[keep_latest:]:
+        filename = os.path.basename(path)
+
+        if filename in referenced_previews:
+            print(
+                "🔒 Keeping referenced outfit preview:",
+                filename,
+            )
+            continue
+
         try:
             os.remove(path)
+
             print(
                 f"🗑️ Removed old outfit preview: {path}"
             )
+
         except Exception as e:
             print(
                 f"⚠ Failed to remove old preview: {e}"
@@ -1211,6 +1270,73 @@ def generate_outfits(
                 existing_outfit["id"],
             )
 
+            existing_image_url = existing_outfit.get(
+                "image_url"
+            )
+
+            # -------------------------------------------------------
+            # Check whether the existing preview file still exists
+            # -------------------------------------------------------
+
+            preview_exists = False
+
+            if existing_image_url:
+                preview_filename = os.path.basename(
+                    existing_image_url
+                )
+
+                preview_path = os.path.join(
+                    OUTFIT_PREVIEW_DIR,
+                    preview_filename,
+                )
+
+                preview_exists = os.path.isfile(
+                    preview_path
+                )
+
+            # -------------------------------------------------------
+            # Regenerate missing preview
+            # -------------------------------------------------------
+
+            if not preview_exists:
+
+                print(
+                    "⚠ Existing outfit preview is missing."
+                )
+
+                print(
+                    "🔄 Regenerating preview for outfit:",
+                    existing_outfit["id"],
+                )
+
+                regenerated_preview = create_outfit_preview(
+                    str(existing_outfit["id"]),
+                    candidate["items"],
+                )
+
+                if regenerated_preview is not None:
+
+                    existing_image_url = regenerated_preview
+
+                    update_outfit_preview(
+                        outfit_id=existing_outfit["id"],
+                        image_url=regenerated_preview,
+                    )
+
+                    print(
+                        "🔥 REGENERATED OUTFIT IMAGE URL:",
+                        regenerated_preview,
+                    )
+
+                else:
+                    print(
+                        "⚠ Failed to regenerate outfit preview."
+                    )
+
+            # -------------------------------------------------------
+            # Build result
+            # -------------------------------------------------------
+
             result = {
                 "id": existing_outfit["id"],
                 "title": existing_outfit.get(
@@ -1218,9 +1344,7 @@ def generate_outfits(
                     "AI Outfit",
                 ),
                 "items": candidate["items"],
-                "image_url": existing_outfit.get(
-                    "image_url"
-                ),
+                "image_url": existing_image_url,
                 "score": round(
                     candidate["score"],
                     4,

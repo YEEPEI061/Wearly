@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/pages/record_outfit_page.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
@@ -8,16 +9,143 @@ class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
 
   @override
-  State<HistoryPage> createState() => _HistoryPageState();
+  State<HistoryPage> createState() => HistoryPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
+class HistoryPageState extends State<HistoryPage> {
   // ============================================================
   // STATE
   // ============================================================
 
-  int _selectedDay = 16;
-  int _monthOffset = 0;
+  late DateTime _selectedDate;
+  late DateTime _displayedMonth;
+
+  late PageController _weekPageController;
+
+  static const int _weekPageBase = 500;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final now = DateTime.now();
+
+    _selectedDate = DateTime(now.year, now.month, now.day);
+
+    _displayedMonth = DateTime(now.year, now.month, 1);
+
+    _weekPageController = PageController(initialPage: _weekPageBase);
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return months[month - 1];
+  }
+
+  String _shortMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return months[month - 1];
+  }
+
+  String _weekdayLetter(int weekday) {
+    const weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    return weekdays[weekday - 1];
+  }
+
+  DateTime _startOfWeek(DateTime date) {
+    return DateTime(date.year, date.month, date.day - (date.weekday - 1));
+  }
+
+  List<DateTime> _getWeekDays(DateTime date) {
+    final start = _startOfWeek(date);
+
+    return List.generate(7, (index) => start.add(Duration(days: index)));
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+
+    return _isSameDay(date, now);
+  }
+
+  int _getWeekNumber(DateTime date) {
+    final thursday = date.add(Duration(days: 4 - date.weekday));
+
+    final firstThursday = DateTime(thursday.year, 1, 4);
+
+    final firstWeekThursday = firstThursday.add(
+      Duration(days: 4 - firstThursday.weekday),
+    );
+
+    return 1 + thursday.difference(firstWeekThursday).inDays ~/ 7;
+  }
+
+  // void _goToPreviousWeek() {
+  //   _weekPageController.previousPage(
+  //     duration: const Duration(milliseconds: 450),
+  //     curve: Curves.easeOutCubic,
+  //   );
+  // }
+
+  // void _goToNextWeek() {
+  //   _weekPageController.nextPage(
+  //     duration: const Duration(milliseconds: 450),
+  //     curve: Curves.easeOutCubic,
+  //   );
+  // }
+
+  @override
+  void dispose() {
+    _weekPageController.dispose();
+    super.dispose();
+  }
+
+  void resetToToday() {
+    final now = DateTime.now();
+
+    setState(() {
+      _selectedDate = DateTime(now.year, now.month, now.day);
+
+      _displayedMonth = DateTime(now.year, now.month, 1);
+    });
+
+    if (_weekPageController.hasClients) {
+      _weekPageController.jumpToPage(_weekPageBase);
+    }
+  }
 
   final List<_HistoryEntry> _historyEntries = [
     _HistoryEntry(
@@ -115,9 +243,7 @@ class _HistoryPageState extends State<HistoryPage> {
   // ============================================================
 
   Widget _buildMonthHeader() {
-    final String monthTitle = _monthOffset == 0
-        ? 'October Diary'
-        : 'September Diary';
+    final monthTitle = '${_monthName(_displayedMonth.month)} Diary';
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -151,17 +277,39 @@ class _HistoryPageState extends State<HistoryPage> {
               isPrimary: false,
               onTap: () {
                 setState(() {
-                  _monthOffset = -1;
+                  _displayedMonth = DateTime(
+                    _displayedMonth.year,
+                    _displayedMonth.month - 1,
+                    1,
+                  );
+
+                  _selectedDate = DateTime(
+                    _displayedMonth.year,
+                    _displayedMonth.month,
+                    1,
+                  );
                 });
               },
             ),
+
             const SizedBox(width: 8),
+
             _buildMonthButton(
               icon: Icons.chevron_right,
               isPrimary: true,
               onTap: () {
                 setState(() {
-                  _monthOffset = 0;
+                  _displayedMonth = DateTime(
+                    _displayedMonth.year,
+                    _displayedMonth.month + 1,
+                    1,
+                  );
+
+                  _selectedDate = DateTime(
+                    _displayedMonth.year,
+                    _displayedMonth.month,
+                    1,
+                  );
                 });
               },
             ),
@@ -254,17 +402,27 @@ class _HistoryPageState extends State<HistoryPage> {
   // ============================================================
 
   Widget _buildWeekSelector() {
-    final days = [
-      _WeekDay('M', '14'),
-      _WeekDay('T', '15'),
-      _WeekDay('W', '16'),
-      _WeekDay('T', '17'),
-      _WeekDay('F', '18'),
-      _WeekDay('S', '19'),
-      _WeekDay('S', '20'),
-    ];
+    final days = _getWeekDays(_selectedDate);
+
+    final weekStart = days.first;
+    final weekEnd = days.last;
+
+    final weekNumber = _getWeekNumber(_selectedDate);
+
+    String rangeText;
+
+    if (weekStart.month == weekEnd.month) {
+      rangeText =
+          '${_shortMonthName(weekStart.month)} '
+          '${weekStart.day} - ${weekEnd.day}';
+    } else {
+      rangeText =
+          '${_shortMonthName(weekStart.month)} ${weekStart.day} - '
+          '${_shortMonthName(weekEnd.month)} ${weekEnd.day}';
+    }
 
     return Container(
+      height: 142,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLow,
@@ -272,19 +430,23 @@ class _HistoryPageState extends State<HistoryPage> {
       ),
       child: Column(
         children: [
+          // ======================================================
+          // FIXED WEEK HEADER
+          // ======================================================
           Row(
             children: [
               Expanded(
                 child: Text(
-                  'WEEK 42 CURATION',
+                  'WEEK $weekNumber CURATION',
                   style: AppTextStyles.labelMedium.copyWith(
                     color: AppColors.primary,
                     letterSpacing: 1.1,
                   ),
                 ),
               ),
+
               Text(
-                'Oct 14 - Oct 20',
+                rangeText,
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.onSurfaceVariant,
                 ),
@@ -292,69 +454,123 @@ class _HistoryPageState extends State<HistoryPage> {
             ],
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 2),
 
-          Row(
-            children: days.map((day) {
-              final selected = _selectedDay == int.parse(day.date);
+          // ======================================================
+          // SWIPEABLE DATE ROW ONLY
+          // ======================================================
+          SizedBox(
+            height: 90,
+            child: PageView.builder(
+              controller: _weekPageController,
+              itemCount: 1000,
+              physics: const BouncingScrollPhysics(),
+              onPageChanged: (page) {
+                final difference = page - _weekPageBase;
 
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedDay = int.parse(day.date);
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppColors.primary
-                          : AppColors.background,
-                      borderRadius: BorderRadius.circular(AppRadius.small),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          day.weekday,
-                          style: AppTextStyles.labelSmall.copyWith(
-                            color: selected
-                                ? AppColors.white.withOpacity(0.7)
-                                : AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          day.date,
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            color: selected
-                                ? AppColors.white
-                                : AppColors.onSurface,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 4,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: selected
-                                ? AppColors.white
-                                : (int.parse(day.date) <= 18
-                                      ? AppColors.primary
-                                      : Colors.transparent),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+                if (difference == 0) {
+                  return;
+                }
+
+                setState(() {
+                  _selectedDate = _selectedDate.add(
+                    Duration(days: difference * 7),
+                  );
+
+                  _displayedMonth = DateTime(
+                    _selectedDate.year,
+                    _selectedDate.month,
+                    1,
+                  );
+                });
+
+                _weekPageController.jumpToPage(_weekPageBase);
+              },
+              itemBuilder: (context, index) {
+                return _buildWeekDateRow(days);
+              },
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWeekDateRow(List<DateTime> days) {
+    return Align(
+      // alignment: Alignment.topCenter,
+      child: Row(
+        mainAxisSize: MainAxisSize.max,
+        children: days.map((date) {
+          final selected = _isSameDay(date, _selectedDate);
+
+          final today = _isToday(date);
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedDate = date;
+
+                  _displayedMonth = DateTime(date.year, date.month, 1);
+                });
+              },
+              child: Container(
+                height: 66,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.only(top: 6, bottom: 0),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.primary : AppColors.background,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                  border: today && !selected
+                      ? Border.all(color: AppColors.primary, width: 1)
+                      : null,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Text(
+                      _weekdayLetter(date.weekday),
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: selected
+                            ? AppColors.white.withOpacity(0.7)
+                            : AppColors.onSurfaceVariant,
+                      ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    Text(
+                      '${date.day}',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: selected ? AppColors.white : AppColors.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+
+                    const SizedBox(height: 2),
+
+                    SizedBox(
+                      // height: 5,
+                      child: today
+                          ? Container(
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: selected
+                                    ? AppColors.white
+                                    : AppColors.primary,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -665,29 +881,9 @@ class _HistoryPageState extends State<HistoryPage> {
   // ============================================================
 
   void _recordLook() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(24, 0, 24, 90),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.small),
-        ),
-        content: Row(
-          children: [
-            const Icon(Icons.auto_awesome, color: AppColors.white, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                "Today's look recording will be connected later.",
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RecordOutfitPage()),
     );
   }
 }
@@ -718,15 +914,4 @@ class _HistoryEntry {
     this.images,
     required this.layout,
   });
-}
-
-// ================================================================
-// WEEK DAY MODEL
-// ================================================================
-
-class _WeekDay {
-  final String weekday;
-  final String date;
-
-  const _WeekDay(this.weekday, this.date);
 }

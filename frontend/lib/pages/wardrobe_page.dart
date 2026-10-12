@@ -85,7 +85,7 @@ class _WardrobePageState extends State<WardrobePage> {
   }
 
   Future<void> _openItem(ClothingItem item) async {
-    final updated = await Navigator.push<bool>(
+    final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (_) => ClothingDetailPage(item: item, isNewItem: false),
@@ -94,9 +94,88 @@ class _WardrobePageState extends State<WardrobePage> {
 
     if (!mounted) return;
 
-    if (updated == true) {
+    if (result == 'deleted') {
       await _loadWardrobe();
+
+      if (!mounted) return;
+
+      _showTopSuccessMessage('Clothing item removed.');
+    } else if (result == 'updated') {
+      await _loadWardrobe();
+
+      if (!mounted) return;
+
+      _showTopSuccessMessage('Clothing item updated.');
     }
+  }
+
+  void _showTopSuccessMessage(String message) {
+    final overlay = Overlay.of(context);
+
+    final overlayEntry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          top: MediaQuery.of(context).padding.top + 16,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.10),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE8F5E9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      message,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(overlayEntry);
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (overlayEntry.mounted) {
+        overlayEntry.remove();
+      }
+    });
   }
 
   List<ClothingItem> get _filteredItems {
@@ -466,7 +545,7 @@ class _WardrobePageState extends State<WardrobePage> {
                   child: Container(
                     width: 130,
                     height: 170,
-                    color: AppColors.surfaceContainerHigh,
+                    color: AppColors.background,
                     child: _buildClothingImage(item),
                   ),
                 ),
