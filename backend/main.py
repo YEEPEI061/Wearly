@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from database.db import get_connection
 from typing import List, Optional
+from datetime import date
 
 from database.clothing import (
     create_clothing_item,
@@ -22,6 +23,7 @@ from database.clothing import (
 )
 from database.outfit import (
     submit_outfit_feedback,
+    get_outfit_feedback,
     find_existing_outfit,
     category_group_for_role,
 )
@@ -456,6 +458,23 @@ def sanitize_json_value(value):
 
     return value
 
+# @app.post("/generate-outfit")
+# def generate_outfit():
+
+#     outfits = generate_outfits(
+#         count=5
+#     )
+
+#     outfits = sanitize_json_value(outfits)
+
+#     print("🔥 FINAL OUTFIT IMAGE URL:")
+#     print(outfits[0].get("image_url") if outfits else "NO OUTFITS")
+
+#     return {
+#         "success": True,
+#         "outfits": outfits,
+#     }
+
 @app.post("/generate-outfit")
 def generate_outfit():
 
@@ -463,10 +482,38 @@ def generate_outfit():
         count=5
     )
 
+    # ------------------------------------------------------------
+    # Load existing Like / Dislike feedback
+    # ------------------------------------------------------------
+
+    for outfit in outfits:
+
+        outfit_id = outfit.get("id")
+
+        if outfit_id is not None:
+            feedback = get_outfit_feedback(
+                outfit_id=int(outfit_id)
+            )
+
+            outfit["feedback"] = feedback
+
     outfits = sanitize_json_value(outfits)
 
-    print("🔥 FINAL OUTFIT IMAGE URL:")
-    print(outfits[0].get("image_url") if outfits else "NO OUTFITS")
+    # ------------------------------------------------------------
+    # Debug
+    # ------------------------------------------------------------
+
+    print("🔥 FINAL GENERATED RESULTS")
+
+    for outfit in outfits:
+        print(
+            "OUTFIT:",
+            outfit.get("id"),
+            "FEEDBACK:",
+            outfit.get("feedback"),
+            "IMAGE:",
+            outfit.get("image_url"),
+        )
 
     return {
         "success": True,
@@ -734,6 +781,191 @@ def record_outfit_preview(data: dict):
             status_code=500,
             detail=str(e),
         )
+
+@app.get("/outfit-history")
+def get_outfit_history(
+    year: int,
+    month: int,
+):
+    connection = None
+    cursor = None
+
+    try:
+        user_id = 1
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        # ============================================================
+        # GET OUTFIT HISTORY
+        # ============================================================
+
+        cursor.execute(
+            """
+            SELECT
+                oh.id AS history_id,
+                oh.worn_date,
+                oh.notes,
+
+                o.id AS outfit_id,
+                o.title AS outfit_title,
+                o.image_url,
+
+                oi.clothing_id,
+                oi.role,
+                oi.display_order,
+
+                ci.name AS clothing_name,
+                ci.category,
+                ci.processed_image_path,
+                ci.image_path
+
+            FROM outfit_history oh
+
+            INNER JOIN outfits o
+                ON o.id = oh.outfit_id
+
+            INNER JOIN outfit_items oi
+                ON oi.outfit_id = o.id
+
+            INNER JOIN clothing_items ci
+                ON ci.id = oi.clothing_id
+
+            WHERE oh.user_id = %s
+              AND YEAR(oh.worn_date) = %s
+              AND MONTH(oh.worn_date) = %s
+              AND ci.is_active = TRUE
+
+            ORDER BY
+                oh.worn_date DESC,
+                oh.id DESC,
+                oi.display_order ASC
+            """,
+            (
+                user_id,
+                year,
+                month,
+            ),
+        )
+
+        rows = cursor.fetchall()
+
+        # ============================================================
+        # GROUP CLOTHING ITEMS BY HISTORY ENTRY
+        # ============================================================
+
+        history_map = {}
+
+        for row in rows:
+
+            history_id = row["history_id"]
+
+            if history_id not in history_map:
+                history_map[history_id] = {
+                    "history_id": history_id,
+                    "worn_date": str(row["worn_date"]),
+                    "notes": row["notes"],
+                    "outfit_id": row["outfit_id"],
+                    "title": row["outfit_title"] or "Recorded Look",
+                    "image_url": row["image_url"],
+                    "items": [],
+                }
+
+            history_map[history_id]["items"].append(
+                {
+                    "id": row["clothing_id"],
+                    "name": row["clothing_name"],
+                    "category": row["category"],
+                    "processed_image_path": row[
+                        "processed_image_path"
+                    ],
+                    "image_path": row["image_path"],
+                    "role": row["role"],
+                    "display_order": row["display_order"],
+                }
+            )
+
+        history = list(history_map.values())
+
+        # ============================================================
+        # ROTATION RATE
+        # ============================================================
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM clothing_items
+            WHERE user_id = %s
+              AND is_active = TRUE
+            """,
+            (user_id,),
+        )
+
+        total_active_items = cursor.fetchone()["COUNT(*)"]
+
+        cursor.execute(
+            """
+            SELECT COUNT(DISTINCT oi.clothing_id)
+            FROM outfit_history oh
+
+            INNER JOIN outfit_items oi
+                ON oi.outfit_id = oh.outfit_id
+
+            INNER JOIN clothing_items ci
+                ON ci.id = oi.clothing_id
+
+            WHERE oh.user_id = %s
+              AND YEAR(oh.worn_date) = %s
+              AND MONTH(oh.worn_date) = %s
+              AND ci.is_active = TRUE
+            """,
+            (
+                user_id,
+                year,
+                month,
+            ),
+        )
+
+        used_items = cursor.fetchone()[
+            "COUNT(DISTINCT oi.clothing_id)"
+        ]
+
+        if total_active_items > 0:
+            rotation_rate = round(
+                (used_items / total_active_items) * 100
+            )
+        else:
+            rotation_rate = 0
+
+        return {
+            "success": True,
+            "year": year,
+            "month": month,
+            "rotation_rate": rotation_rate,
+            "total_active_items": total_active_items,
+            "used_items": used_items,
+            "history": history,
+        }
+
+    except Exception as e:
+
+        print(
+            "❌ GET OUTFIT HISTORY ERROR:",
+            e,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+    finally:
+
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None:
+            connection.close()
 
 @app.post("/outfit-history")
 def save_outfit_history(

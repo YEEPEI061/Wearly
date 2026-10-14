@@ -2,6 +2,7 @@ import os
 import json
 import math
 import numpy as np
+import random
 from datetime import datetime
 from typing import List, Dict, Optional
 from PIL import Image
@@ -846,8 +847,8 @@ def create_outfit_preview(
 
         upper_image.thumbnail(
             (
-                430,
-                275,
+                360,
+                230,
             ),
             Image.Resampling.LANCZOS,
         )
@@ -857,7 +858,7 @@ def create_outfit_preview(
             - upper_image.width
         ) // 2
 
-        upper_y = 18
+        upper_y = 25
 
         canvas.alpha_composite(
             upper_image,
@@ -874,8 +875,8 @@ def create_outfit_preview(
 
         lower_image.thumbnail(
             (
-                520,
-                470,
+                560,
+                500,
             ),
             Image.Resampling.LANCZOS,
         )
@@ -885,7 +886,7 @@ def create_outfit_preview(
             - lower_image.width
         ) // 2
 
-        lower_y = 320
+        lower_y = 270
 
         canvas.alpha_composite(
             lower_image,
@@ -1203,6 +1204,55 @@ def generate_outfits(
     )
 
     # ---------------------------------------------------------------
+    # Recommendation variety
+    #
+    # Use the strongest candidates, but vary their order so repeated
+    # generation does not always return exactly the same outfits.
+    # Higher-scoring outfits remain more likely to appear first.
+    # ---------------------------------------------------------------
+
+    candidate_pool = candidates[:10]
+
+    if candidate_pool:
+
+        weights = [
+            max(candidate["score"], 0.01)
+            for candidate in candidate_pool
+        ]
+
+        varied_candidates = []
+
+        remaining_candidates = candidate_pool.copy()
+        remaining_weights = weights.copy()
+
+        while remaining_candidates:
+
+            selected = random.choices(
+                remaining_candidates,
+                weights=remaining_weights,
+                k=1,
+            )[0]
+
+            selected_index = remaining_candidates.index(
+                selected
+            )
+
+            varied_candidates.append(
+                selected
+            )
+
+            remaining_candidates.pop(
+                selected_index
+            )
+
+            remaining_weights.pop(
+                selected_index
+            )
+
+    else:
+        varied_candidates = []
+
+    # ---------------------------------------------------------------
     # Remove duplicate item combinations
     # ---------------------------------------------------------------
 
@@ -1214,7 +1264,7 @@ def generate_outfits(
     # Brand-new outfits that still need to be saved
     new_outfits = []
 
-    for candidate in candidates[:20]:
+    for candidate in varied_candidates:
 
         ids = tuple(
             sorted(
@@ -1416,10 +1466,6 @@ def generate_outfits(
             new_outfits
         )
 
-        # -----------------------------------------------------------
-        # Generate preview for newly saved outfits
-        # -----------------------------------------------------------
-
         for saved_outfit in saved_new_outfits:
 
             outfit_id = saved_outfit["id"]
@@ -1444,29 +1490,43 @@ def generate_outfits(
                 image_url=preview_image,
             )
 
-        # -----------------------------------------------------------
-        # Add newly saved outfits to final results
-        # -----------------------------------------------------------
-
         results.extend(
             saved_new_outfits
         )
 
+
     # ---------------------------------------------------------------
-    # Keep only requested number of results
+    # Final results
     # ---------------------------------------------------------------
 
     results = results[:count]
 
-    # ---------------------------------------------------------------
-    # Cleanup old preview images
-    # ---------------------------------------------------------------
-
     cleanup_old_outfit_previews(
-        keep_latest=20
+        keep_latest=50
     )
 
+    print("========================================")
+    print("🔥 FINAL GENERATED RESULTS")
+
+    for result in results:
+        print(
+            "OUTFIT:",
+            result.get("id"),
+            "ITEMS:",
+            [
+                item.get("id")
+                for item in result.get("items", [])
+            ],
+            "SCORE:",
+            result.get("score"),
+            "IMAGE:",
+            result.get("image_url"),
+        )
+
+    print("========================================")
+
     return results
+
 
 
 # -------------------------------------------------------------------

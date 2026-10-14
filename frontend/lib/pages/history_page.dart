@@ -4,6 +4,7 @@ import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_header.dart';
+import 'package:frontend/services/api_service.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -20,9 +21,16 @@ class HistoryPageState extends State<HistoryPage> {
   late DateTime _selectedDate;
   late DateTime _displayedMonth;
 
-  late PageController _weekPageController;
+  List<Map<String, dynamic>> _historyEntries = [];
 
-  static const int _weekPageBase = 500;
+  int _rotationRate = 0;
+
+  bool _isLoadingHistory = false;
+
+  String? _historyError;
+
+  int _monthAnimationDirection = 1;
+  int _timelineAnimationKey = 0;
 
   @override
   void initState() {
@@ -34,7 +42,7 @@ class HistoryPageState extends State<HistoryPage> {
 
     _displayedMonth = DateTime(now.year, now.month, 1);
 
-    _weekPageController = PageController(initialPage: _weekPageBase);
+    _loadHistory();
   }
 
   String _monthName(int month) {
@@ -81,6 +89,33 @@ class HistoryPageState extends State<HistoryPage> {
     return weekdays[weekday - 1];
   }
 
+  String _weekdayName(int weekday) {
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+
+    return weekdays[weekday - 1].toUpperCase();
+  }
+
+  String _buildHistoryDescription(Map<String, dynamic> history) {
+    final notes = history['notes']?.toString().trim() ?? '';
+
+    if (notes.isNotEmpty) {
+      return notes
+          .split(RegExp(r'\r?\n+'))
+          .where((line) => line.trim().isNotEmpty)
+          .join(' • ');
+    }
+
+    return '';
+  }
+
   DateTime _startOfWeek(DateTime date) {
     return DateTime(date.year, date.month, date.day - (date.weekday - 1));
   }
@@ -113,6 +148,42 @@ class HistoryPageState extends State<HistoryPage> {
     return 1 + thursday.difference(firstWeekThursday).inDays ~/ 7;
   }
 
+  Future<void> _loadHistory() async {
+    setState(() {
+      _isLoadingHistory = true;
+      _historyError = null;
+    });
+
+    try {
+      final data = await ApiService.getOutfitHistory(
+        year: _displayedMonth.year,
+        month: _displayedMonth.month,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _rotationRate = (data['rotation_rate'] as num?)?.toInt() ?? 0;
+
+        _historyEntries = List<Map<String, dynamic>>.from(
+          data['history'] ?? [],
+        );
+
+        _isLoadingHistory = false;
+
+        // Trigger the timeline transition
+        _timelineAnimationKey++;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingHistory = false;
+        _historyError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
   // void _goToPreviousWeek() {
   //   _weekPageController.previousPage(
   //     duration: const Duration(milliseconds: 450),
@@ -129,7 +200,6 @@ class HistoryPageState extends State<HistoryPage> {
 
   @override
   void dispose() {
-    _weekPageController.dispose();
     super.dispose();
   }
 
@@ -142,48 +212,8 @@ class HistoryPageState extends State<HistoryPage> {
       _displayedMonth = DateTime(now.year, now.month, 1);
     });
 
-    if (_weekPageController.hasClients) {
-      _weekPageController.jumpToPage(_weekPageBase);
-    }
+    _loadHistory();
   }
-
-  final List<_HistoryEntry> _historyEntries = [
-    _HistoryEntry(
-      day: '16',
-      month: 'Oct',
-      weekday: 'Wed',
-      title: 'The Autumnal Tailor',
-      description: 'Camel Trench • Cashmere Knit • Loafers',
-      image:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAM14j4pFi7nXvWpwZw76_6jegeUAaeH8SMSfQSCtDSGeNhEeiGcJsTBF81Aeb9BVkzfGoaPrYVcJ7Q4Rz1camGa2IlxFH_CxKAeA9swWzOmZ_pm-V0Ukwnm9LgrrJubr8R8O_VtxrmZFjnqqTrGoe7dq0NTAn4JzlRp6_pRajQwXf0r0EPQe0l2tkKyZCeIpEFJOLtJCfCzqV8oQktJ6wEvg9BmrVOurCIlBmH3UW9BLzJQOWTu7sS',
-      layout: 1,
-    ),
-    _HistoryEntry(
-      day: '15',
-      month: 'Oct',
-      weekday: 'Tue',
-      title: 'Monochrome Tailoring',
-      description: 'Charcoal Blazer • Poplin Shirt • Pleated Trousers',
-      images: [
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuBAJZfN_zNJEqAlGhZ_R2tQ6fynIxIhqGZpx9aH1xsAC-RT2rwoSGY4IejN_AZY1x-FkcWFXDncG1up5ecfypxPboYdituTw2-djjkjgi2dQk5H42JBFGT6SPumGkludmT-6Kj6YeJ8wnjXwZjJcHl1aRaRdcDqc0mnFNogOMwQ6ruJY9Jl05_4JCUPZBWeP1hS6ZG8jo4StYdWzPPdzgj7MAB8PVrBx0DWjg3Kv8vvq1U-gwmtfB_Q',
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuA7hylN80VHoNIKi1U2ytL-9KTlL6fWnYHqd8LefNyqrO8ZsPIP798XIr5uyhgN8lkIWNC0-KUFDSDQClHXdepgzyQVMJT_QDJ1n8cnwaaR2hs4wV27u1k5QJA_UemvBZ2TgHX2vIQOZl5pbR1SkVbN1AfmCh_wen46x5ZBAW5ETROB12J9gJUu-b5Be2ulh5R7gcAlJKocqt4GyDL5CfFDIwO3BAVj1toIehBCNypxobWHcFisfJ75',
-      ],
-      layout: 2,
-    ),
-    _HistoryEntry(
-      day: '14',
-      month: 'Oct',
-      weekday: 'Mon',
-      title: 'Weekend Casual',
-      description: 'Relaxed Denim • Graphic Tee • Canvas Trainers',
-      images: [
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuCOUcjMwu0NaPg7adnhpnQNs64u8Rbu5KFftoHe9rvKmWpjPArnMcQ7MZUhnDh5xMBNDeuMI1cMJwugQkyvFw_2N2Y3ncCXjW2PVZgaoEkkk7w2A2VfEwKNFIOwk3xe6HvAg97xisBIwhbJkwULwsyWAat7a5Fjt_VTV75PlrU7icTJN5b1yFKT8pC2_97WAvv_UeCsxIZLFcpO1OZgK0fn8PQdpqDYE0Av_TGdmDfQsMsNw8AGP9qS',
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuDvibRjkDnxm3BYu33x9OyK2rpV-ddoMVIDeScU5mk2YLdxJj9L-IU--qDdWW8CJZmYREkeocaGhCb3qnxlj4iT_uU3V9Cf1wzWNuh_4S3_nUMoqGlBYw5AKbLUUw7O6cIihEkfmkCfmRZb86u7Yd2mik3Q8J_ebHbfynZXFyLG8rKst34loxBDz7P0CWeJ7rBspaPv1dqgIh5ZJVDqZMijL-pLPI4R0z0pt7C6f9ZPJf9ZLZUqL3yS',
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuCMGDnRbNYm8Dg0hkzTRl5qMnNY6lJcqStvdJyjVMThTkjuysi6ToNKCHho6cS9lbsF7zr1iF3w1n873gxwh9Mj9eIkEMCwLQLzWJA16NVJbczG2LDnaV6HIMIcCYaCEukMbYDpzNfF4SnnLqC-GiECHyQh_GqSs69lkoxjRdlgnFnNn8MS9a5KM4HQoH-Vb4m0XmuxvCflGeZzp6SV-q7SbKf77qfMW02ipjH010bAXXhFG3aNSTD0',
-      ],
-      layout: 3,
-    ),
-  ];
 
   // ============================================================
   // BUILD
@@ -224,7 +254,7 @@ class HistoryPageState extends State<HistoryPage> {
                       const SizedBox(height: 24),
                       _buildWeekSelector(),
                       const SizedBox(height: 24),
-                      _buildTimeline(),
+                      _buildAnimatedTimeline(),
                       const SizedBox(height: 24),
                       _buildLogPrompt(),
                     ]),
@@ -242,6 +272,10 @@ class HistoryPageState extends State<HistoryPage> {
   // MONTH HEADER
   // ============================================================
 
+  // ============================================================
+  // MONTH HEADER
+  // ============================================================
+
   Widget _buildMonthHeader() {
     final monthTitle = '${_monthName(_displayedMonth.month)} Diary';
 
@@ -249,33 +283,68 @@ class HistoryPageState extends State<HistoryPage> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'CHRONICLE',
-                style: AppTextStyles.labelMedium.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                  letterSpacing: 1.5,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ClipRect(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 350),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final isEntering = child.key == ValueKey(monthTitle);
+
+                  final beginOffset = isEntering
+                      ? Offset(0.25 * _monthAnimationDirection, 0)
+                      : Offset(-0.25 * _monthAnimationDirection, 0);
+
+                  final slideAnimation = Tween<Offset>(
+                    begin: beginOffset,
+                    end: Offset.zero,
+                  ).animate(animation);
+
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: slideAnimation,
+                      child: child,
+                    ),
+                  );
+                },
+                child: Column(
+                  key: ValueKey(monthTitle),
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'CHRONICLE',
+                      style: AppTextStyles.labelMedium.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      monthTitle,
+                      style: AppTextStyles.headlineMedium.copyWith(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                monthTitle,
-                style: AppTextStyles.headlineMedium.copyWith(
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
 
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             _buildMonthButton(
               icon: Icons.chevron_left,
               isPrimary: false,
               onTap: () {
+                _monthAnimationDirection = -1;
+
                 setState(() {
                   _displayedMonth = DateTime(
                     _displayedMonth.year,
@@ -289,6 +358,8 @@ class HistoryPageState extends State<HistoryPage> {
                     1,
                   );
                 });
+
+                _loadHistory();
               },
             ),
 
@@ -298,6 +369,8 @@ class HistoryPageState extends State<HistoryPage> {
               icon: Icons.chevron_right,
               isPrimary: true,
               onTap: () {
+                _monthAnimationDirection = 1;
+
                 setState(() {
                   _displayedMonth = DateTime(
                     _displayedMonth.year,
@@ -311,6 +384,8 @@ class HistoryPageState extends State<HistoryPage> {
                     1,
                   );
                 });
+
+                _loadHistory();
               },
             ),
           ],
@@ -377,7 +452,7 @@ class HistoryPageState extends State<HistoryPage> {
           const SizedBox(height: 16),
 
           Text(
-            '84%',
+            '$_rotationRate%',
             style: AppTextStyles.headlineMedium.copyWith(
               color: AppColors.primary,
               fontWeight: FontWeight.w500,
@@ -430,9 +505,6 @@ class HistoryPageState extends State<HistoryPage> {
       ),
       child: Column(
         children: [
-          // ======================================================
-          // FIXED WEEK HEADER
-          // ======================================================
           Row(
             children: [
               Expanded(
@@ -456,41 +528,7 @@ class HistoryPageState extends State<HistoryPage> {
 
           const SizedBox(height: 2),
 
-          // ======================================================
-          // SWIPEABLE DATE ROW ONLY
-          // ======================================================
-          SizedBox(
-            height: 90,
-            child: PageView.builder(
-              controller: _weekPageController,
-              itemCount: 1000,
-              physics: const BouncingScrollPhysics(),
-              onPageChanged: (page) {
-                final difference = page - _weekPageBase;
-
-                if (difference == 0) {
-                  return;
-                }
-
-                setState(() {
-                  _selectedDate = _selectedDate.add(
-                    Duration(days: difference * 7),
-                  );
-
-                  _displayedMonth = DateTime(
-                    _selectedDate.year,
-                    _selectedDate.month,
-                    1,
-                  );
-                });
-
-                _weekPageController.jumpToPage(_weekPageBase);
-              },
-              itemBuilder: (context, index) {
-                return _buildWeekDateRow(days);
-              },
-            ),
-          ),
+          SizedBox(height: 90, child: _buildWeekDateRow(days)),
         ],
       ),
     );
@@ -575,11 +613,166 @@ class HistoryPageState extends State<HistoryPage> {
     );
   }
 
+  String _buildHistoryTitle(List<Map<String, dynamic>> items) {
+    final colors = <String>[];
+
+    for (final item in items) {
+      final name = item['name']?.toString().trim() ?? '';
+
+      if (name.isEmpty) continue;
+
+      final lowerName = name.toLowerCase();
+
+      if (lowerName.contains('black')) {
+        colors.add('Black');
+      } else if (lowerName.contains('dark gray') ||
+          lowerName.contains('dark grey')) {
+        colors.add('Gray');
+      } else if (lowerName.contains('light gray') ||
+          lowerName.contains('light grey')) {
+        colors.add('Gray');
+      } else if (lowerName.contains('white')) {
+        colors.add('White');
+      } else if (lowerName.contains('beige')) {
+        colors.add('Beige');
+      } else if (lowerName.contains('brown')) {
+        colors.add('Brown');
+      } else if (lowerName.contains('navy')) {
+        colors.add('Navy');
+      } else if (lowerName.contains('blue')) {
+        colors.add('Blue');
+      } else if (lowerName.contains('green')) {
+        colors.add('Green');
+      } else if (lowerName.contains('red')) {
+        colors.add('Red');
+      } else if (lowerName.contains('pink')) {
+        colors.add('Pink');
+      } else if (lowerName.contains('purple')) {
+        colors.add('Purple');
+      } else if (lowerName.contains('orange')) {
+        colors.add('Orange');
+      } else if (lowerName.contains('yellow')) {
+        colors.add('Yellow');
+      }
+    }
+
+    final uniqueColors = colors.toSet().toList();
+
+    if (uniqueColors.isEmpty) {
+      return 'Outfit';
+    }
+
+    if (uniqueColors.length == 1) {
+      return '${uniqueColors.first} Outfit';
+    }
+
+    if (uniqueColors.length == 2) {
+      return '${uniqueColors[0]} & ${uniqueColors[1]} Outfit';
+    }
+
+    return '${uniqueColors.take(3).join(', ')} Outfit';
+  }
+
   // ============================================================
   // TIMELINE
   // ============================================================
 
+  Widget _buildAnimatedTimeline() {
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 420),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final isEntering = child.key == ValueKey(_timelineAnimationKey);
+
+          final beginOffset = isEntering
+              ? Offset(0.10 * _monthAnimationDirection, 0)
+              : Offset(-0.10 * _monthAnimationDirection, 0);
+
+          final slideAnimation = Tween<Offset>(
+            begin: beginOffset,
+            end: Offset.zero,
+          ).animate(animation);
+
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(position: slideAnimation, child: child),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey(_timelineAnimationKey),
+          child: _buildTimeline(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTimeline() {
+    if (_isLoadingHistory) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: AppColors.primary,
+          ),
+        ),
+      );
+    }
+
+    if (_historyError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 30),
+        child: Center(
+          child: Text(
+            _historyError!,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    if (_historyEntries.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.small),
+        ),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.checkroom_outlined,
+              size: 32,
+              color: AppColors.outline,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'NO OUTFITS RECORDED',
+              style: AppTextStyles.labelSmall.copyWith(
+                color: AppColors.primary,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Your outfit diary is empty for this month.',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       children: _historyEntries.asMap().entries.map((entry) {
         final index = entry.key;
@@ -595,17 +788,22 @@ class HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _buildTimelineEntry(
-    _HistoryEntry history, {
+    Map<String, dynamic> history, {
     required bool isFirst,
     required bool isLast,
   }) {
+    final wornDate = DateTime.parse(history['worn_date'].toString());
+
+    final items = List<Map<String, dynamic>>.from(history['items'] ?? []);
+
+    final title = _buildHistoryTitle(items);
+
+    final description = _buildHistoryDescription(history);
+
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ======================================================
-          // DATE
-          // ======================================================
           SizedBox(
             width: 56,
             child: Padding(
@@ -614,7 +812,7 @@ class HistoryPageState extends State<HistoryPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${history.day} ${history.month}',
+                    '${wornDate.day} ${_shortMonthName(wornDate.month)}',
                     style: AppTextStyles.labelMedium.copyWith(
                       color: AppColors.onSurface,
                       fontWeight: FontWeight.w600,
@@ -622,7 +820,7 @@ class HistoryPageState extends State<HistoryPage> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    history.weekday.toUpperCase(),
+                    _weekdayName(wornDate.weekday),
                     style: AppTextStyles.labelSmall.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -634,9 +832,6 @@ class HistoryPageState extends State<HistoryPage> {
 
           const SizedBox(width: 12),
 
-          // ======================================================
-          // TIMELINE LINE
-          // ======================================================
           SizedBox(
             width: 10,
             child: Stack(
@@ -652,6 +847,7 @@ class HistoryPageState extends State<HistoryPage> {
                       color: AppColors.surfaceContainerHigh,
                     ),
                   ),
+
                 Positioned(
                   top: 6,
                   left: 0,
@@ -673,21 +869,18 @@ class HistoryPageState extends State<HistoryPage> {
 
           const SizedBox(width: 12),
 
-          // ======================================================
-          // OUTFIT CONTENT
-          // ======================================================
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHistoryImages(history),
+                  _buildHistoryImages(items),
 
                   const SizedBox(height: 8),
 
                   Text(
-                    history.title,
+                    title,
                     style: AppTextStyles.headlineSmall.copyWith(
                       color: AppColors.primary,
                     ),
@@ -696,7 +889,7 @@ class HistoryPageState extends State<HistoryPage> {
                   const SizedBox(height: 2),
 
                   Text(
-                    history.description,
+                    description,
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -714,9 +907,22 @@ class HistoryPageState extends State<HistoryPage> {
   // HISTORY IMAGES
   // ============================================================
 
-  Widget _buildHistoryImages(_HistoryEntry history) {
-    if (history.layout == 1) {
-      return _buildSingleImage(history);
+  Widget _buildHistoryImages(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) {
+      return _buildEmptyHistoryImage();
+    }
+
+    final imageItems = items.where((item) {
+      final processed = item['processed_image_path']?.toString();
+
+      final original = item['image_path']?.toString();
+
+      return (processed != null && processed.isNotEmpty) ||
+          (original != null && original.isNotEmpty);
+    }).toList();
+
+    if (imageItems.isEmpty) {
+      return _buildEmptyHistoryImage();
     }
 
     return Container(
@@ -726,7 +932,15 @@ class HistoryPageState extends State<HistoryPage> {
         borderRadius: BorderRadius.circular(AppRadius.large),
       ),
       child: Row(
-        children: history.images!.map((image) {
+        children: imageItems.map((item) {
+          final imagePath = item['processed_image_path']?.toString();
+
+          final fallbackPath = item['image_path']?.toString();
+
+          final path = imagePath != null && imagePath.isNotEmpty
+              ? imagePath
+              : fallbackPath;
+
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.all(2),
@@ -734,7 +948,7 @@ class HistoryPageState extends State<HistoryPage> {
                 aspectRatio: 1,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.small),
-                  child: _buildNetworkImage(image),
+                  child: _buildBackendImage(path!),
                 ),
               ),
             ),
@@ -744,37 +958,21 @@ class HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  Widget _buildSingleImage(_HistoryEntry history) {
-    return Stack(
-      children: [
-        AspectRatio(
-          aspectRatio: 4 / 3,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.large),
-            child: _buildNetworkImage(history.image!),
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildBackendImage(String path) {
+    final url = path.startsWith('http') ? path : '${ApiService.baseUrl}$path';
 
-  // ============================================================
-  // NETWORK IMAGE
-  // ============================================================
-
-  Widget _buildNetworkImage(String url) {
     return Image.network(
       url,
       width: double.infinity,
       height: double.infinity,
-      fit: BoxFit.cover,
+      fit: BoxFit.contain,
       errorBuilder: (_, __, ___) {
         return Container(
           color: AppColors.surfaceContainerMedium,
           child: const Center(
             child: Icon(
               Icons.checkroom_outlined,
-              size: 42,
+              size: 36,
               color: AppColors.outline,
             ),
           ),
@@ -799,6 +997,24 @@ class HistoryPageState extends State<HistoryPage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildEmptyHistoryImage() {
+    return Container(
+      width: double.infinity,
+      height: 120,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.large),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.checkroom_outlined,
+          size: 40,
+          color: AppColors.outline,
+        ),
+      ),
     );
   }
 
@@ -886,32 +1102,4 @@ class HistoryPageState extends State<HistoryPage> {
       MaterialPageRoute(builder: (_) => const RecordOutfitPage()),
     );
   }
-}
-
-// ================================================================
-// HISTORY MODEL
-// ================================================================
-
-class _HistoryEntry {
-  final String day;
-  final String month;
-  final String weekday;
-  final String title;
-  final String description;
-
-  final String? image;
-  final List<String>? images;
-
-  final int layout;
-
-  const _HistoryEntry({
-    required this.day,
-    required this.month,
-    required this.weekday,
-    required this.title,
-    required this.description,
-    this.image,
-    this.images,
-    required this.layout,
-  });
 }

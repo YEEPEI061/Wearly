@@ -350,4 +350,26 @@ class ApiService {
       throw Exception('Failed to save outfit history: ${response.body}');
     }
   }
+
+  static Future<Map<String, dynamic>> getOutfitHistory({
+    required int year,
+    required int month,
+  }) async {
+    final response = await http.get(
+      Uri.parse(
+        '$baseUrl/outfit-history'
+        '?year=$year'
+        '&month=$month',
+      ),
+    );
+
+    print('GET OUTFIT HISTORY STATUS: ${response.statusCode}');
+    print('GET OUTFIT HISTORY RESPONSE: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load outfit history: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
 }

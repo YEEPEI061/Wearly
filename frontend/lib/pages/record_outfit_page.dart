@@ -232,14 +232,20 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
       children: [
         Row(
           children: [
-            Container(width: 6, height: 6, color: AppColors.primary),
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+            ),
             const SizedBox(width: 8),
             Text(
               'OUTFIT DIARY',
-              style: AppTextStyles.labelSmall.copyWith(
-                color: AppColors.secondary,
-                letterSpacing: 2,
-                fontWeight: FontWeight.w600,
+              style: AppTextStyles.labelMedium.copyWith(
+                color: AppColors.primaryContainer,
+                letterSpacing: 1.5,
               ),
             ),
           ],

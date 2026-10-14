@@ -38,6 +38,8 @@ class _StylistPageState extends State<StylistPage>
 
   bool _isSubmittingFeedback = false;
 
+  final Map<String, String> _feedbackByOutfitId = {};
+
   String? _recommendationError;
 
   String _selectedOccasion = 'Evening';
@@ -81,6 +83,15 @@ class _StylistPageState extends State<StylistPage>
           )
           .toList();
 
+      for (final outfit in recommendations) {
+        final outfitId = outfit['id']?.toString();
+        final feedback = outfit['feedback']?.toString();
+
+        if (outfitId != null && feedback != null && feedback.isNotEmpty) {
+          _feedbackByOutfitId[outfitId] = feedback;
+        }
+      }
+
       setState(() {
         _recommendations = recommendations;
         _selectedRecommendationIndex = 0;
@@ -100,6 +111,75 @@ class _StylistPageState extends State<StylistPage>
 
       print('❌ Outfit recommendation failed: $e');
     }
+  }
+
+  void _showTopSuccessMessage(String message) {
+    final overlay = Overlay.of(context);
+
+    final overlayEntry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          top: MediaQuery.of(context).padding.top + 16,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.10),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE8F5E9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      message,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(overlayEntry);
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (overlayEntry.mounted) {
+        overlayEntry.remove();
+      }
+    });
   }
 
   // ============================================================
@@ -140,17 +220,14 @@ class _StylistPageState extends State<StylistPage>
 
       setState(() {
         _isSubmittingFeedback = false;
+
+        _feedbackByOutfitId[outfitId] = feedback;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            feedback == 'LIKE'
-                ? 'Look saved to your preferences.'
-                : 'We will adjust future recommendations.',
-          ),
-          duration: const Duration(milliseconds: 1400),
-        ),
+      _showTopSuccessMessage(
+        feedback == 'LIKE'
+            ? 'Look saved to your preferences.'
+            : 'We will adjust future recommendations.',
       );
 
       // ------------------------------------------------------------
@@ -304,14 +381,25 @@ class _StylistPageState extends State<StylistPage>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
-                'AI OUTFIT RECOMMENDATION',
-                style: AppTextStyles.labelMedium.copyWith(
-                  color: AppColors.primary,
-                  letterSpacing: 1.5,
+            Row(
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Text(
+                  'AI OUTFIT RECOMMENDATION',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primaryContainer,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(width: 12),
@@ -531,10 +619,18 @@ class _StylistPageState extends State<StylistPage>
   // ============================================================
 
   Widget _buildRecommendationActions() {
+    final outfitId = _recommendation?['id']?.toString() ?? '';
+
+    final feedback = _feedbackByOutfitId[outfitId];
+
+    final isLiked = feedback == 'LIKE';
+    final isDisliked = feedback == 'DISLIKE';
+
     return Row(
       children: [
         _buildRoundActionButton(
-          icon: Icons.thumb_down_outlined,
+          icon: isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+          isSelected: isDisliked,
           onTap: _handleDislike,
         ),
 
@@ -567,7 +663,11 @@ class _StylistPageState extends State<StylistPage>
 
         const SizedBox(width: 12),
 
-        _buildRoundActionButton(icon: Icons.thumb_up, onTap: _handleLike),
+        _buildRoundActionButton(
+          icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+          isSelected: isLiked,
+          onTap: _handleLike,
+        ),
       ],
     );
   }
@@ -575,16 +675,25 @@ class _StylistPageState extends State<StylistPage>
   Widget _buildRoundActionButton({
     required IconData icon,
     required VoidCallback onTap,
+    required bool isSelected,
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.25),
+          color: isSelected
+              ? AppColors.primary
+              : AppColors.primary.withOpacity(0.25),
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.white.withOpacity(0.25)),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary
+                : AppColors.white.withOpacity(0.25),
+            width: isSelected ? 2 : 1,
+          ),
         ),
         child: Icon(icon, size: 24, color: AppColors.white),
       ),

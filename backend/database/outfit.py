@@ -385,6 +385,40 @@ def submit_outfit_feedback(
         cursor.close()
         connection.close()
 
+def get_outfit_feedback(
+    outfit_id: int,
+    user_id: int = 1,
+):
+    connection = get_connection()
+    cursor = connection.cursor(
+        dictionary=True
+    )
+
+    try:
+        cursor.execute(
+            """
+            SELECT feedback
+            FROM outfit_feedback
+            WHERE outfit_id = %s
+              AND user_id = %s
+            LIMIT 1
+            """,
+            (
+                outfit_id,
+                user_id,
+            ),
+        )
+
+        result = cursor.fetchone()
+
+        if result is None:
+            return None
+
+        return result["feedback"]
+
+    finally:
+        cursor.close()
+        connection.close()
 
 def get_feedback_preferences(
     user_id: int = 1,
