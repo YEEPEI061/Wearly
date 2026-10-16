@@ -56,6 +56,7 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
 
   String? _outfitPreviewUrl;
   bool _isGeneratingPreview = false;
+  bool _isSaving = false;
 
   // ============================================================
   // INIT
@@ -1542,10 +1543,19 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
       width: double.infinity,
       height: 54,
       child: ElevatedButton.icon(
-        onPressed: _saveOutfit,
-        icon: const Icon(Icons.history_edu, size: 20),
+        onPressed: _isSaving ? null : _saveOutfit,
+        icon: _isSaving
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.white,
+                ),
+              )
+            : const Icon(Icons.history_edu, size: 20),
         label: Text(
-          'SAVE TO OUTFIT HISTORY',
+          _isSaving ? 'SAVING OUTFIT...' : 'SAVE TO OUTFIT HISTORY',
           style: AppTextStyles.labelMedium.copyWith(
             color: AppColors.white,
             letterSpacing: 1.0,
@@ -1554,6 +1564,8 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.white,
+          disabledBackgroundColor: AppColors.primary,
+          disabledForegroundColor: AppColors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.medium),
@@ -1579,6 +1591,8 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
   }
 
   Future<void> _saveOutfit() async {
+    if (_isSaving) return;
+
     final List<String> itemIds = [];
 
     if (_fullItem != null) {
@@ -1600,14 +1614,27 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
 
     final finalNote = _buildFinalNote();
 
+    setState(() {
+      _isSaving = true;
+    });
+
     try {
-      await ApiService.saveOutfitHistory(
+      final saveFuture = ApiService.saveOutfitHistory(
         itemIds: itemIds,
         wornDate: _selectedDate,
         notes: finalNote,
       );
 
+      await Future.wait([
+        saveFuture,
+        Future.delayed(const Duration(milliseconds: 500)),
+      ]);
+
       if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
 
       _showTopSuccessMessage('Outfit recorded successfully.');
 
@@ -1618,6 +1645,10 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
 
       _showError(e.toString().replaceFirst('Exception: ', ''));
     }

@@ -1018,11 +1018,132 @@ def cleanup_old_outfit_previews(
             )
 
 # -------------------------------------------------------------------
+# Occasion + Mood recommendation bonus
+# -------------------------------------------------------------------
+
+def occasion_mood_bonus(
+    outfit: Dict,
+    occasion: str,
+    mood: str,
+) -> Dict[str, float]:
+
+    occasion_styles = {
+        "casual": {
+            "casual",
+            "relaxed",
+            "streetwear",
+        },
+        "work": {
+            "smart casual",
+            "formal",
+            "minimalist",
+            "preppy",
+        },
+        "evening": {
+            "elegant",
+            "formal",
+            "minimalist",
+        },
+        "going out": {
+            "streetwear",
+            "casual",
+            "elegant",
+            "preppy",
+        },
+    }
+
+    mood_styles = {
+        "relaxed": {
+            "relaxed",
+            "casual",
+        },
+        "smart": {
+            "smart casual",
+            "formal",
+            "preppy",
+            "minimalist",
+        },
+        "elegant": {
+            "elegant",
+            "formal",
+            "minimalist",
+        },
+        "trendy": {
+            "streetwear",
+            "preppy",
+            "casual",
+        },
+    }
+
+    occasion_key = occasion.strip().lower()
+    mood_key = mood.strip().lower()
+
+    matching_occasion_styles = occasion_styles.get(
+        occasion_key,
+        set(),
+    )
+
+    matching_mood_styles = mood_styles.get(
+        mood_key,
+        set(),
+    )
+
+    styles = []
+
+    for item in outfit.get("items", []):
+
+        style = item.get("style")
+
+        if style:
+            styles.append(
+                style.strip().lower()
+            )
+
+    if not styles:
+        return {
+            "occasion_bonus": 0.0,
+            "mood_bonus": 0.0,
+        }
+
+    occasion_matches = sum(
+        1
+        for style in styles
+        if style in matching_occasion_styles
+    )
+
+    mood_matches = sum(
+        1
+        for style in styles
+        if style in matching_mood_styles
+    )
+
+    occasion_score = (
+        occasion_matches / len(styles)
+    )
+
+    mood_score = (
+        mood_matches / len(styles)
+    )
+
+    # Maximum:
+    # Occasion = +0.06
+    # Mood     = +0.04
+    occasion_bonus = occasion_score * 0.06
+    mood_bonus = mood_score * 0.04
+
+    return {
+        "occasion_bonus": occasion_bonus,
+        "mood_bonus": mood_bonus,
+    }
+
+# -------------------------------------------------------------------
 # Generate outfit
 # -------------------------------------------------------------------
 
 def generate_outfits(
     count: int = 5,
+    occasion: str = "Casual",
+    mood: str = "Relaxed",
 ) -> List[Dict]:
 
     wardrobe = get_clothing_items()
@@ -1075,7 +1196,21 @@ def generate_outfits(
             preferences,
         )
 
-        score = base_score + personalization
+        context_bonus = occasion_mood_bonus(
+            outfit,
+            occasion,
+            mood,
+        )
+
+        occasion_bonus = context_bonus["occasion_bonus"]
+        mood_bonus = context_bonus["mood_bonus"]
+
+        score = (
+            base_score
+            + personalization
+            + occasion_bonus
+            + mood_bonus
+        )
 
         score = min(
             1.0,
@@ -1100,6 +1235,14 @@ def generate_outfits(
             f"{personalization:+.4f}",
         )
         print(
+            "Occasion bonus:",
+            f"{occasion_bonus:+.4f}",
+        )
+        print(
+            "Mood bonus:",
+            f"{mood_bonus:+.4f}",
+        )
+        print(
             "Final score:",
             round(score, 4),
         )
@@ -1116,6 +1259,9 @@ def generate_outfits(
                 f"full-body look in "
                 f"{dress.get('color', 'a versatile color')}."
             ),
+            "occasion": occasion,
+            "mood": mood,
+            "style": dress.get("style"),
         })
 
     # ---------------------------------------------------------------
@@ -1145,7 +1291,21 @@ def generate_outfits(
                 preferences,
             )
 
-            score = base_score + personalization
+            context_bonus = occasion_mood_bonus(
+                outfit,
+                occasion,
+                mood,
+            )
+
+            occasion_bonus = context_bonus["occasion_bonus"]
+            mood_bonus = context_bonus["mood_bonus"]
+
+            score = (
+                base_score
+                + personalization
+                + occasion_bonus
+                + mood_bonus
+            )
 
             score = min(
                 1.0,
@@ -1170,9 +1330,18 @@ def generate_outfits(
                 f"{personalization:+.4f}",
             )
             print(
+                "Occasion bonus:",
+                f"{occasion_bonus:+.4f}",
+            )
+            print(
+                "Mood bonus:",
+                f"{mood_bonus:+.4f}",
+            )
+            print(
                 "Final score:",
                 round(score, 4),
             )
+            
             print("========================================")
 
             reason = (
@@ -1192,6 +1361,9 @@ def generate_outfits(
                 "score": score,
                 "reason": reason,
                 "score_breakdown": scores,
+                "occasion": occasion,
+                "mood": mood,
+                "style": top.get("style"),
             })
 
     # ---------------------------------------------------------------
@@ -1248,6 +1420,11 @@ def generate_outfits(
             remaining_weights.pop(
                 selected_index
             )
+
+        varied_candidates.sort(
+            key=lambda outfit: outfit.get("score", 0),
+            reverse=True,
+        )
 
     else:
         varied_candidates = []
@@ -1394,6 +1571,9 @@ def generate_outfits(
                     "AI Outfit",
                 ),
                 "items": candidate["items"],
+                "occasion": candidate.get("occasion"),
+                "mood": candidate.get("mood"),
+                "style": candidate.get("style"),
                 "image_url": existing_image_url,
                 "score": round(
                     candidate["score"],
@@ -1437,6 +1617,9 @@ def generate_outfits(
             result = {
                 "title": "AI Outfit",
                 "items": candidate["items"],
+                "occasion": candidate.get("occasion"),
+                "mood": candidate.get("mood"),
+                "style": candidate.get("style"),
                 "score": round(
                     candidate["score"],
                     4,

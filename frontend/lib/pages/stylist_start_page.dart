@@ -16,6 +16,7 @@ class StylistStartPage extends StatefulWidget {
 
 class _StylistStartPageState extends State<StylistStartPage> {
   String _selectedOccasion = 'Casual';
+  String _selectedMood = 'Relaxed';
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +71,7 @@ class _StylistStartPageState extends State<StylistStartPage> {
             const Icon(Icons.auto_awesome, size: 18, color: AppColors.primary),
             const SizedBox(width: 6),
             Text(
-              'AURA AI STYLIST',
+              'WEARLY AI STYLIST',
               style: AppTextStyles.labelSmall.copyWith(
                 color: AppColors.onSurfaceVariant,
                 letterSpacing: 1.5,
@@ -130,6 +131,23 @@ class _StylistStartPageState extends State<StylistStartPage> {
         const SizedBox(height: 28),
 
         // ============================================================
+        // MOOD TITLE
+        // ============================================================
+        Text(
+          'Select Mood',
+          style: AppTextStyles.headlineSmall.copyWith(color: AppColors.primary),
+        ),
+
+        const SizedBox(height: 12),
+
+        // ============================================================
+        // MOOD OPTIONS
+        // ============================================================
+        _buildMoodSelector(),
+
+        const SizedBox(height: 28),
+
+        // ============================================================
         // START STYLING BUTTON
         // ============================================================
         SizedBox(
@@ -139,7 +157,12 @@ class _StylistStartPageState extends State<StylistStartPage> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const StylistPage()),
+                MaterialPageRoute(
+                  builder: (_) => StylistPage(
+                    occasion: _selectedOccasion,
+                    mood: _selectedMood,
+                  ),
+                ),
               );
             },
             icon: const Icon(Icons.arrow_forward, size: 20),
@@ -287,9 +310,9 @@ class _StylistStartPageState extends State<StylistStartPage> {
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 8,
-      mainAxisSpacing: 8,
-      childAspectRatio: 2.6,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 3.4,
       children: [
         _buildOccasionOption('Casual', Icons.weekend_outlined),
         _buildOccasionOption('Work', Icons.business_center_outlined),
@@ -298,10 +321,6 @@ class _StylistStartPageState extends State<StylistStartPage> {
       ],
     );
   }
-
-  // ================================================================
-  // OCCASION OPTION
-  // ================================================================
 
   Widget _buildOccasionOption(String title, IconData icon) {
     final bool isSelected = _selectedOccasion == title;
@@ -312,40 +331,102 @@ class _StylistStartPageState extends State<StylistStartPage> {
           _selectedOccasion = title;
         });
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.primary
               : AppColors.surfaceContainerMedium,
           borderRadius: BorderRadius.circular(AppRadius.small),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary
+                : AppColors.outline.withOpacity(0.12),
+            width: 1,
+          ),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
-              size: 20,
+              size: 17,
               color: isSelected ? AppColors.white : AppColors.onSurfaceVariant,
             ),
+            const SizedBox(width: 7),
+            Text(
+              title,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: isSelected ? AppColors.white : AppColors.onSurface,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-            const SizedBox(width: 10),
+  // ================================================================
+  // MOOD SELECTOR
+  // ================================================================
 
-            Expanded(
-              child: Text(
-                title,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: isSelected ? AppColors.white : AppColors.onSurface,
-                  fontWeight: FontWeight.w500,
-                ),
+  Widget _buildMoodSelector() {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 3.4,
+      children: [
+        _buildMoodOption('Relaxed', Icons.spa_outlined),
+        _buildMoodOption('Smart', Icons.auto_awesome_outlined),
+        _buildMoodOption('Elegant', Icons.diamond_outlined),
+        _buildMoodOption('Trendy', Icons.local_fire_department_outlined),
+      ],
+    );
+  }
+
+  Widget _buildMoodOption(String title, IconData icon) {
+    final bool isSelected = _selectedMood == title;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedMood = title;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary
+              : AppColors.surfaceContainerMedium,
+          borderRadius: BorderRadius.circular(AppRadius.small),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary
+                : AppColors.outline.withOpacity(0.12),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 17,
+              color: isSelected ? AppColors.white : AppColors.onSurfaceVariant,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              title,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: isSelected ? AppColors.white : AppColors.onSurface,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],

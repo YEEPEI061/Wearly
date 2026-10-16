@@ -148,10 +148,14 @@ class ApiService {
   // GENERATE FIRST OUTFIT
   // ========================================================
 
-  static Future<Map<String, dynamic>> generateOutfit() async {
+  static Future<Map<String, dynamic>> generateOutfit({
+    required String occasion,
+    required String mood,
+  }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/generate-outfit'),
       headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'occasion': occasion, 'mood': mood}),
     );
 
     if (response.statusCode != 200) {
@@ -167,11 +171,17 @@ class ApiService {
 
   static Future<Map<String, dynamic>> generateAnotherOutfit({
     required List<List<String>> excludedOutfits,
+    required String occasion,
+    required String mood,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/generate-outfit/another'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'excluded_outfits': excludedOutfits}),
+      body: jsonEncode({
+        'excluded_outfits': excludedOutfits,
+        'occasion': occasion,
+        'mood': mood,
+      }),
     );
 
     if (response.statusCode != 200) {
@@ -368,6 +378,37 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception('Failed to load outfit history: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> scheduleOutfit({
+    required String outfitId,
+    required DateTime wornDate,
+    String? notes,
+  }) async {
+    final formattedDate =
+        '${wornDate.year.toString().padLeft(4, '0')}-'
+        '${wornDate.month.toString().padLeft(2, '0')}-'
+        '${wornDate.day.toString().padLeft(2, '0')}';
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/outfit-history'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'outfit_id': int.parse(outfitId),
+        'worn_date': formattedDate,
+        'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
+      }),
+    );
+
+    print('SCHEDULE OUTFIT STATUS: ${response.statusCode}');
+
+    print('SCHEDULE OUTFIT RESPONSE: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to schedule outfit: ${response.body}');
     }
 
     return jsonDecode(response.body) as Map<String, dynamic>;

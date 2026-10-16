@@ -25,11 +25,17 @@ def save_generated_outfits(
                 INSERT INTO outfits (
                     user_id,
                     title,
+                    occasion,
+                    mood,
+                    style,
                     recommendation_score,
                     is_generated,
                     is_saved
                 )
                 VALUES (
+                    %s,
+                    %s,
+                    %s,
                     %s,
                     %s,
                     %s,
@@ -45,6 +51,15 @@ def save_generated_outfits(
                     outfit.get(
                         "title",
                         "AI Outfit",
+                    ),
+                    outfit.get(
+                        "occasion",
+                    ),
+                    outfit.get(
+                        "mood",
+                    ),
+                    outfit.get(
+                        "style",
                     ),
                     outfit.get(
                         "score",

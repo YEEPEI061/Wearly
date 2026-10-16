@@ -7,7 +7,10 @@ import 'package:frontend/widgets/app_page_header.dart';
 import 'package:frontend/services/api_service.dart';
 
 class StylistPage extends StatefulWidget {
-  const StylistPage({super.key});
+  final String occasion;
+  final String mood;
+
+  const StylistPage({super.key, required this.occasion, required this.mood});
 
   @override
   State<StylistPage> createState() => _StylistPageState();
@@ -42,14 +45,32 @@ class _StylistPageState extends State<StylistPage>
 
   String? _recommendationError;
 
-  String _selectedOccasion = 'Evening';
-  DateTime _selectedDate = DateTime(2024, 10, 24);
+  DateTime _selectedDate = DateTime.now();
+
+  late DateTime _scheduleDisplayedMonth;
+
+  final TextEditingController _scheduleNotesController =
+      TextEditingController();
+
+  bool _isSavingSchedule = false;
 
   @override
   void initState() {
     super.initState();
 
+    final now = DateTime.now();
+
+    _selectedDate = DateTime(now.year, now.month, now.day);
+
+    _scheduleDisplayedMonth = DateTime(now.year, now.month, 1);
+
     _loadRecommendation();
+  }
+
+  @override
+  void dispose() {
+    _scheduleNotesController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRecommendation() async {
@@ -61,7 +82,10 @@ class _StylistPageState extends State<StylistPage>
     });
 
     try {
-      final response = await ApiService.generateOutfit();
+      final response = await ApiService.generateOutfit(
+        occasion: widget.occasion,
+        mood: widget.mood,
+      );
 
       if (!mounted) return;
 
@@ -303,16 +327,65 @@ class _StylistPageState extends State<StylistPage>
     });
   }
 
-  void _confirmSchedule() {
-    Navigator.pop(context);
+  Future<void> _confirmSchedule() async {
+    if (_recommendation == null) {
+      return;
+    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Look scheduled for ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}.',
-        ),
-      ),
-    );
+    if (_isSavingSchedule) {
+      return;
+    }
+
+    final outfitId = _recommendation!['id']?.toString() ?? '';
+
+    if (outfitId.isEmpty) {
+      _showFeedbackError('This outfit does not have a valid ID.');
+      return;
+    }
+
+    setState(() {
+      _isSavingSchedule = true;
+    });
+
+    try {
+      await ApiService.scheduleOutfit(
+        outfitId: outfitId,
+        wornDate: _selectedDate,
+        notes: _scheduleNotesController.text,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isSavingSchedule = false;
+      });
+
+      Navigator.pop(context);
+
+      _scheduleNotesController.clear();
+
+      Future.delayed(const Duration(milliseconds: 250), () {
+        if (!mounted) return;
+
+        _showTopSuccessMessage('Look added to your outfit diary.');
+      });
+
+      print(
+        '✓ OUTFIT SCHEDULED: '
+        'outfit=$outfitId '
+        'date=$_selectedDate',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSavingSchedule = false;
+      });
+
+      _showFeedbackError('Unable to schedule this look.');
+
+      print('❌ SCHEDULE OUTFIT ERROR: $e');
+    }
   }
 
   // ============================================================
@@ -481,39 +554,17 @@ class _StylistPageState extends State<StylistPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildRecommendationContext(),
+
+              const SizedBox(height: 12),
+
               _buildRecommendedClothing(items),
 
               const SizedBox(height: 20),
 
-              Text(
-                'LOOK BREAKDOWN',
-                style: AppTextStyles.labelSmall.copyWith(
-                  color: AppColors.primary,
-                  letterSpacing: 1.5,
-                ),
-              ),
-
-              const SizedBox(height: 6),
-
-              Text(
-                'AI Curated Outfit',
-                style: AppTextStyles.headlineMedium.copyWith(
-                  color: AppColors.primary,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                reason,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
               _buildRecommendationActions(),
+
+              const SizedBox(height: 5),
             ],
           ),
         ),
@@ -753,7 +804,7 @@ class _StylistPageState extends State<StylistPage>
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'Select date & styling occasion',
+                    'Choose a date and add optional notes',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -809,7 +860,18 @@ class _StylistPageState extends State<StylistPage>
   }
 
   Widget _buildScheduleSheet(StateSetter setSheetState) {
-    final days = List.generate(35, (index) => index - 1);
+    final firstDay = DateTime(
+      _scheduleDisplayedMonth.year,
+      _scheduleDisplayedMonth.month,
+      1,
+    );
+
+    final daysInMonth = _daysInMonth(_scheduleDisplayedMonth);
+
+    // Monday = 1, so Monday needs zero empty cells.
+    final leadingEmptyDays = firstDay.weekday - 1;
+
+    final totalCells = ((leadingEmptyDays + daysInMonth + 6) ~/ 7) * 7;
 
     return Container(
       constraints: BoxConstraints(
@@ -883,16 +945,35 @@ class _StylistPageState extends State<StylistPage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'October 2024',
+                    '${_scheduleMonthName(_scheduleDisplayedMonth.month)} '
+                    '${_scheduleDisplayedMonth.year}',
                     style: AppTextStyles.headlineSmall.copyWith(
                       color: AppColors.primary,
                     ),
                   ),
                   Row(
                     children: [
-                      _buildCalendarArrow(Icons.chevron_left),
+                      _buildCalendarArrow(Icons.chevron_left, () {
+                        setSheetState(() {
+                          _scheduleDisplayedMonth = DateTime(
+                            _scheduleDisplayedMonth.year,
+                            _scheduleDisplayedMonth.month - 1,
+                            1,
+                          );
+                        });
+                      }),
+
                       const SizedBox(width: 4),
-                      _buildCalendarArrow(Icons.chevron_right),
+
+                      _buildCalendarArrow(Icons.chevron_right, () {
+                        setSheetState(() {
+                          _scheduleDisplayedMonth = DateTime(
+                            _scheduleDisplayedMonth.year,
+                            _scheduleDisplayedMonth.month + 1,
+                            1,
+                          );
+                        });
+                      }),
                     ],
                   ),
                 ],
@@ -929,33 +1010,33 @@ class _StylistPageState extends State<StylistPage>
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: days.length,
+                itemCount: totalCells,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 7,
                   mainAxisExtent: 42,
                 ),
                 itemBuilder: (_, index) {
-                  final day = days[index];
+                  final day = index - leadingEmptyDays + 1;
 
-                  if (day <= 0 || day > 31) {
-                    final displayDay = day <= 0 ? 30 : day - 31;
-
-                    return Center(
-                      child: Text(
-                        '$displayDay',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.outlineVariant,
-                        ),
-                      ),
-                    );
+                  if (day < 1 || day > daysInMonth) {
+                    return const SizedBox.shrink();
                   }
 
-                  final isSelected = day == _selectedDate.day;
+                  final date = DateTime(
+                    _scheduleDisplayedMonth.year,
+                    _scheduleDisplayedMonth.month,
+                    day,
+                  );
+
+                  final isSelected =
+                      _selectedDate.year == date.year &&
+                      _selectedDate.month == date.month &&
+                      _selectedDate.day == date.day;
 
                   return GestureDetector(
                     onTap: () {
                       setSheetState(() {
-                        _selectedDate = DateTime(2024, 10, day);
+                        _selectedDate = date;
                       });
                     },
                     child: Center(
@@ -990,8 +1071,9 @@ class _StylistPageState extends State<StylistPage>
               const SizedBox(height: 20),
 
               // Occasion
+              // Notes
               Text(
-                'OCCASION WINDOW',
+                'NOTES',
                 style: AppTextStyles.labelSmall.copyWith(
                   color: AppColors.onSurfaceVariant,
                   letterSpacing: 1.3,
@@ -1000,14 +1082,33 @@ class _StylistPageState extends State<StylistPage>
 
               const SizedBox(height: 8),
 
-              Row(
-                children: [
-                  _buildOccasionButton('ALL DAY', setSheetState),
-                  const SizedBox(width: 8),
-                  _buildOccasionButton('DAYTIME', setSheetState),
-                  const SizedBox(width: 8),
-                  _buildOccasionButton('EVENING', setSheetState),
-                ],
+              TextField(
+                controller: _scheduleNotesController,
+                maxLength: 500,
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: 'Add a note about this look...',
+                  hintStyle: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.surfaceContainerHigh,
+                  counterText: '',
+                  contentPadding: const EdgeInsets.all(14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    borderSide: BorderSide(color: AppColors.outlineVariant),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    borderSide: const BorderSide(color: AppColors.primary),
+                  ),
+                ),
               ),
 
               const SizedBox(height: 20),
@@ -1017,10 +1118,10 @@ class _StylistPageState extends State<StylistPage>
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton.icon(
-                  onPressed: _confirmSchedule,
+                  onPressed: _isSavingSchedule ? null : _confirmSchedule,
                   icon: const Icon(Icons.event_available, size: 18),
                   label: Text(
-                    'ADD TO CALENDAR',
+                    _isSavingSchedule ? 'SAVING...' : 'ADD TO OUTFIT DIARY',
                     style: AppTextStyles.labelMedium.copyWith(
                       color: AppColors.white,
                       letterSpacing: 1.2,
@@ -1043,59 +1144,42 @@ class _StylistPageState extends State<StylistPage>
     );
   }
 
-  Widget _buildCalendarArrow(IconData icon) {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh,
-        shape: BoxShape.circle,
-      ),
-      child: Icon(icon, size: 18, color: AppColors.onSurfaceVariant),
-    );
-  }
-
-  Widget _buildOccasionButton(String label, StateSetter setSheetState) {
-    final isSelected = _selectedOccasion == _occasionValue(label);
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setSheetState(() {
-            _selectedOccasion = _occasionValue(label);
-          });
-        },
-        child: Container(
-          height: 42,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryContainer : Colors.transparent,
-            border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.outlineVariant,
-            ),
-            borderRadius: BorderRadius.circular(AppRadius.small),
-          ),
-          child: Text(
-            label,
-            style: AppTextStyles.labelSmall.copyWith(
-              color: isSelected ? AppColors.white : AppColors.onSurface,
-              letterSpacing: 0.8,
-            ),
-          ),
+  Widget _buildCalendarArrow(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          shape: BoxShape.circle,
         ),
+        child: Icon(icon, size: 18, color: AppColors.onSurfaceVariant),
       ),
     );
   }
 
-  String _occasionValue(String label) {
-    switch (label) {
-      case 'ALL DAY':
-        return 'All Day';
-      case 'DAYTIME':
-        return 'Daytime';
-      default:
-        return 'Evening';
-    }
+  String _scheduleMonthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return months[month - 1];
+  }
+
+  int _daysInMonth(DateTime month) {
+    return DateTime(month.year, month.month + 1, 0).day;
   }
 
   // ============================================================
@@ -1569,6 +1653,26 @@ class _StylistPageState extends State<StylistPage>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRecommendationContext() {
+    return Row(
+      children: [
+        Icon(
+          Icons.auto_awesome_outlined,
+          size: 18,
+          color: AppColors.onSurfaceVariant,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${widget.occasion} · ${widget.mood}',
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

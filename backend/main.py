@@ -91,10 +91,14 @@ class OutfitFeedbackRequest(BaseModel):
     feedback: str
 
 class OutfitHistoryRequest(BaseModel):
-    item_ids: List[str]
+    item_ids: Optional[List[str]] = None
+    outfit_id: Optional[int] = None
     worn_date: str
     notes: Optional[str] = None
 
+class OutfitGenerationRequest(BaseModel):
+    occasion: str
+    mood: str
 
 # -------------------------------------------------------------------
 # Basic route
@@ -458,28 +462,22 @@ def sanitize_json_value(value):
 
     return value
 
-# @app.post("/generate-outfit")
-# def generate_outfit():
-
-#     outfits = generate_outfits(
-#         count=5
-#     )
-
-#     outfits = sanitize_json_value(outfits)
-
-#     print("🔥 FINAL OUTFIT IMAGE URL:")
-#     print(outfits[0].get("image_url") if outfits else "NO OUTFITS")
-
-#     return {
-#         "success": True,
-#         "outfits": outfits,
-#     }
 
 @app.post("/generate-outfit")
-def generate_outfit():
+def generate_outfit(
+    request: OutfitGenerationRequest,
+):
+
+    print(
+        "🎯 OUTFIT CONTEXT:",
+        "OCCASION =", request.occasion,
+        "MOOD =", request.mood,
+    )
 
     outfits = generate_outfits(
-        count=5
+        count=5,
+        occasion=request.occasion,
+        mood=request.mood,
     )
 
     # ------------------------------------------------------------
@@ -975,138 +973,195 @@ def save_outfit_history(
     cursor = None
 
     try:
-        if not request.item_ids:
-            raise HTTPException(
-                status_code=400,
-                detail="Please select at least one clothing item.",
-            )
-
         user_id = 1
 
         # ========================================================
-        # 1. Check whether this clothing combination already exists
+        # 1. STYLIST PAGE
+        #    Existing generated outfit ID was provided
         # ========================================================
 
-        existing_outfit = find_existing_outfit(
-            clothing_ids=request.item_ids,
-            user_id=user_id,
-        )
-
-        if existing_outfit:
-            outfit_id = existing_outfit["id"]
-
-            print(
-                f"✓ Using existing outfit: {outfit_id}"
-            )
-
-        else:
-            # ====================================================
-            # 2. Create a new outfit
-            # ====================================================
+        if request.outfit_id is not None:
 
             connection = get_connection()
-            cursor = connection.cursor()
-
-            # Determine title
-            if len(request.item_ids) == 1:
-                title = "Recorded Outfit"
-            else:
-                title = "Recorded Look"
+            cursor = connection.cursor(
+                dictionary=True
+            )
 
             cursor.execute(
                 """
-                INSERT INTO outfits (
-                    user_id,
-                    title,
-                    recommendation_score,
-                    is_generated,
-                    is_saved
-                )
-                VALUES (
-                    %s,
-                    %s,
-                    %s,
-                    FALSE,
-                    TRUE
-                )
+                SELECT id
+                FROM outfits
+                WHERE id = %s
+                  AND user_id = %s
+                LIMIT 1
                 """,
                 (
+                    request.outfit_id,
                     user_id,
-                    title,
-                    0.0,
                 ),
             )
 
-            outfit_id = cursor.lastrowid
+            existing_outfit = cursor.fetchone()
 
-            # ====================================================
-            # 3. Save outfit items
-            # ====================================================
+            if existing_outfit is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Outfit not found.",
+                )
 
-            for display_order, item_id in enumerate(
-                request.item_ids
-            ):
+            outfit_id = request.outfit_id
+
+            print(
+                f"✓ Using stylist outfit: "
+                f"{outfit_id}"
+            )
+
+        # ========================================================
+        # 2. RECORD OUTFIT PAGE
+        #    Clothing item IDs were provided
+        # ========================================================
+
+        elif request.item_ids:
+
+            existing_outfit = find_existing_outfit(
+                clothing_ids=request.item_ids,
+                user_id=user_id,
+            )
+
+            if existing_outfit:
+
+                outfit_id = existing_outfit["id"]
+
+                print(
+                    f"✓ Using existing outfit: "
+                    f"{outfit_id}"
+                )
+
+            else:
+
+                # =================================================
+                # 3. Create new recorded outfit
+                # =================================================
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                if len(request.item_ids) == 1:
+                    title = "Recorded Outfit"
+                else:
+                    title = "Recorded Look"
 
                 cursor.execute(
                     """
-                    SELECT category
-                    FROM clothing_items
-                    WHERE id = %s
-                      AND is_active = TRUE
-                    LIMIT 1
-                    """,
-                    (item_id,),
-                )
-
-                item = cursor.fetchone()
-
-                if item is None:
-                    raise HTTPException(
-                        status_code=404,
-                        detail=(
-                            f"Clothing item {item_id} "
-                            "was not found."
-                        ),
-                    )
-
-                category = item[0]
-
-                role = category_group_for_role(
-                    category
-                )
-
-                cursor.execute(
-                    """
-                    INSERT INTO outfit_items (
-                        outfit_id,
-                        clothing_id,
-                        role,
-                        display_order
+                    INSERT INTO outfits (
+                        user_id,
+                        title,
+                        recommendation_score,
+                        is_generated,
+                        is_saved
                     )
                     VALUES (
                         %s,
                         %s,
                         %s,
-                        %s
+                        FALSE,
+                        TRUE
                     )
                     """,
                     (
-                        outfit_id,
-                        item_id,
-                        role,
-                        display_order,
+                        user_id,
+                        title,
+                        0.0,
                     ),
                 )
 
-            print(
-                f"✓ Created recorded outfit: {outfit_id}"
+                outfit_id = cursor.lastrowid
+
+                # =============================================
+                # Save outfit clothing items
+                # =============================================
+
+                for display_order, item_id in enumerate(
+                    request.item_ids
+                ):
+
+                    cursor.execute(
+                        """
+                        SELECT category
+                        FROM clothing_items
+                        WHERE id = %s
+                          AND is_active = TRUE
+                        LIMIT 1
+                        """,
+                        (item_id,),
+                    )
+
+                    item = cursor.fetchone()
+
+                    if item is None:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=(
+                                f"Clothing item "
+                                f"{item_id} "
+                                "was not found."
+                            ),
+                        )
+
+                    category = item[0]
+
+                    role = category_group_for_role(
+                        category
+                    )
+
+                    cursor.execute(
+                        """
+                        INSERT INTO outfit_items (
+                            outfit_id,
+                            clothing_id,
+                            role,
+                            display_order
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            %s,
+                            %s
+                        )
+                        """,
+                        (
+                            outfit_id,
+                            item_id,
+                            role,
+                            display_order,
+                        ),
+                    )
+
+                print(
+                    f"✓ Created recorded outfit: "
+                    f"{outfit_id}"
+                )
+
+        # ========================================================
+        # 4. Nothing supplied
+        # ========================================================
+
+        else:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Please provide either "
+                    "outfit_id or item_ids."
+                ),
             )
 
         # ========================================================
-        # 4. Save to outfit_history
+        # 5. Save to outfit_history
         # ========================================================
 
         if connection is None:
+
             connection = get_connection()
             cursor = connection.cursor()
 
@@ -1140,7 +1195,8 @@ def save_outfit_history(
         print(
             f"✓ Outfit history saved: "
             f"history_id={history_id}, "
-            f"outfit_id={outfit_id}"
+            f"outfit_id={outfit_id}, "
+            f"date={request.worn_date}"
         )
 
         return {
@@ -1151,11 +1207,14 @@ def save_outfit_history(
         }
 
     except HTTPException:
+
         if connection is not None:
             connection.rollback()
+
         raise
 
     except Exception as e:
+
         if connection is not None:
             connection.rollback()
 
@@ -1170,6 +1229,7 @@ def save_outfit_history(
         )
 
     finally:
+
         if cursor is not None:
             cursor.close()
 

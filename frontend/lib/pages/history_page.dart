@@ -787,6 +787,24 @@ class HistoryPageState extends State<HistoryPage> {
     );
   }
 
+  bool _shouldShowTimelineDate(Map<String, dynamic> history) {
+    final currentDate = DateTime.parse(history['worn_date'].toString());
+
+    final index = _historyEntries.indexOf(history);
+
+    if (index <= 0) {
+      return true;
+    }
+
+    final previousHistory = _historyEntries[index - 1];
+
+    final previousDate = DateTime.parse(
+      previousHistory['worn_date'].toString(),
+    );
+
+    return !_isSameDay(currentDate, previousDate);
+  }
+
   Widget _buildTimelineEntry(
     Map<String, dynamic> history, {
     required bool isFirst,
@@ -805,28 +823,32 @@ class HistoryPageState extends State<HistoryPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 56,
+            width: 64,
             child: Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${wornDate.day} ${_shortMonthName(wornDate.month)}',
-                    style: AppTextStyles.labelMedium.copyWith(
-                      color: AppColors.onSurface,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _weekdayName(wornDate.weekday),
-                    style: AppTextStyles.labelSmall.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
+              child: _shouldShowTimelineDate(history)
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${wornDate.day} ${_shortMonthName(wornDate.month)}',
+                          style: AppTextStyles.labelMedium.copyWith(
+                            color: AppColors.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _weekdayName(wornDate.weekday),
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
 
@@ -840,7 +862,7 @@ class HistoryPageState extends State<HistoryPage> {
                 if (!isLast)
                   Positioned(
                     top: 8,
-                    bottom: -32,
+                    bottom: -180,
                     left: 4,
                     child: Container(
                       width: 2,
@@ -1096,10 +1118,14 @@ class HistoryPageState extends State<HistoryPage> {
   // RECORD LOOK
   // ============================================================
 
-  void _recordLook() {
-    Navigator.push(
+  Future<void> _recordLook() async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const RecordOutfitPage()),
     );
+
+    if (result == true && mounted) {
+      await _loadHistory();
+    }
   }
 }

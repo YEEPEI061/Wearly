@@ -274,6 +274,8 @@ def create_tables():
 
                 occasion VARCHAR(50),
 
+                mood VARCHAR(50),
+
                 style VARCHAR(50),
 
                 weather_condition VARCHAR(100),
