@@ -1028,6 +1028,10 @@ def save_outfit_history(
                 user_id=user_id,
             )
 
+            # ====================================================
+            # Existing outfit found
+            # ====================================================
+
             if existing_outfit:
 
                 outfit_id = existing_outfit["id"]
@@ -1036,6 +1040,10 @@ def save_outfit_history(
                     f"✓ Using existing outfit: "
                     f"{outfit_id}"
                 )
+
+            # ====================================================
+            # New outfit
+            # ====================================================
 
             else:
 
@@ -1087,7 +1095,8 @@ def save_outfit_history(
 
                     cursor.execute(
                         """
-                        SELECT category
+                        SELECT
+                            category
                         FROM clothing_items
                         WHERE id = %s
                           AND is_active = TRUE
@@ -1135,6 +1144,75 @@ def save_outfit_history(
                             role,
                             display_order,
                         ),
+                    )
+
+                # =============================================
+                # Generate outfit preview
+                # =============================================
+
+                cursor.execute(
+                    """
+                    SELECT
+                        ci.id,
+                        ci.category,
+                        ci.processed_image_path,
+                        ci.image_path
+                    FROM clothing_items ci
+                    INNER JOIN outfit_items oi
+                        ON oi.clothing_id = ci.id
+                    WHERE oi.outfit_id = %s
+                    ORDER BY oi.display_order ASC
+                    """,
+                    (outfit_id,),
+                )
+
+                outfit_items = cursor.fetchall()
+
+                preview_items = []
+
+                for item in outfit_items:
+
+                    preview_items.append(
+                        {
+                            "id": item[0],
+                            "category": item[1],
+                            "processed_image_path": item[2],
+                            "image_path": item[3],
+                        }
+                    )
+
+                image_url = create_outfit_preview(
+                    str(outfit_id),
+                    preview_items,
+                )
+
+                # =============================================
+                # Save preview URL to outfits table
+                # =============================================
+
+                if image_url is not None:
+
+                    cursor.execute(
+                        """
+                        UPDATE outfits
+                        SET image_url = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            image_url,
+                            outfit_id,
+                        ),
+                    )
+
+                    print(
+                        f"✓ Saved outfit preview: "
+                        f"{image_url}"
+                    )
+
+                else:
+
+                    print(
+                        "⚠ Could not create outfit preview."
                     )
 
                 print(
@@ -1190,6 +1268,10 @@ def save_outfit_history(
 
         history_id = cursor.lastrowid
 
+        # ========================================================
+        # 6. Commit everything
+        # ========================================================
+
         connection.commit()
 
         print(
@@ -1236,6 +1318,405 @@ def save_outfit_history(
         if connection is not None:
             connection.close()
 
+
+@app.put("/outfit-history/{history_id}")
+def update_outfit_history(
+    history_id: int,
+    request: OutfitHistoryRequest,
+):
+    connection = None
+    cursor = None
+
+    try:
+        user_id = 1
+
+        # ========================================================
+        # 1. CHECK HISTORY RECORD EXISTS
+        # ========================================================
+
+        connection = get_connection()
+        cursor = connection.cursor(
+            dictionary=True
+        )
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                outfit_id,
+                worn_date,
+                notes
+            FROM outfit_history
+            WHERE id = %s
+              AND user_id = %s
+            LIMIT 1
+            """,
+            (
+                history_id,
+                user_id,
+            ),
+        )
+
+        history = cursor.fetchone()
+
+        if history is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Outfit history record not found.",
+            )
+
+        old_outfit_id = history["outfit_id"]
+
+        print(
+            f"✏️ Editing history: "
+            f"{history_id}, "
+            f"old outfit={old_outfit_id}"
+        )
+
+        # ========================================================
+        # 2. DETERMINE OUTFIT
+        # ========================================================
+
+        if request.item_ids:
+
+            # ----------------------------------------------------
+            # Try to reuse an outfit containing exactly
+            # these clothing items
+            # ----------------------------------------------------
+
+            existing_outfit = find_existing_outfit(
+                clothing_ids=request.item_ids,
+                user_id=user_id,
+            )
+
+            if existing_outfit:
+
+                new_outfit_id = existing_outfit["id"]
+
+                print(
+                    f"✓ Reusing existing outfit: "
+                    f"{new_outfit_id}"
+                )
+
+            else:
+
+                # ------------------------------------------------
+                # Create a new recorded outfit
+                # ------------------------------------------------
+
+                if len(request.item_ids) == 1:
+                    title = "Recorded Outfit"
+                else:
+                    title = "Recorded Look"
+
+                cursor.execute(
+                    """
+                    INSERT INTO outfits (
+                        user_id,
+                        title,
+                        recommendation_score,
+                        is_generated,
+                        is_saved
+                    )
+                    VALUES (
+                        %s,
+                        %s,
+                        %s,
+                        FALSE,
+                        TRUE
+                    )
+                    """,
+                    (
+                        user_id,
+                        title,
+                        0.0,
+                    ),
+                )
+
+                new_outfit_id = cursor.lastrowid
+
+                # ================================================
+                # SAVE CLOTHING ITEMS FOR NEW OUTFIT
+                # ================================================
+
+                for display_order, item_id in enumerate(
+                    request.item_ids
+                ):
+
+                    cursor.execute(
+                        """
+                        SELECT category
+                        FROM clothing_items
+                        WHERE id = %s
+                          AND user_id = %s
+                          AND is_active = TRUE
+                        LIMIT 1
+                        """,
+                        (
+                            item_id,
+                            user_id,
+                        ),
+                    )
+
+                    item = cursor.fetchone()
+
+                    if item is None:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=(
+                                f"Clothing item "
+                                f"{item_id} "
+                                "was not found."
+                            ),
+                        )
+
+                    category = item["category"]
+
+                    role = category_group_for_role(
+                        category
+                    )
+
+                    cursor.execute(
+                        """
+                        INSERT INTO outfit_items (
+                            outfit_id,
+                            clothing_id,
+                            role,
+                            display_order
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            %s,
+                            %s
+                        )
+                        """,
+                        (
+                            new_outfit_id,
+                            item_id,
+                            role,
+                            display_order,
+                        ),
+                    )
+
+                print(
+                    f"✓ Created new recorded outfit: "
+                    f"{new_outfit_id}"
+                )
+
+        # ========================================================
+        # 3. EXISTING OUTFIT ID PROVIDED
+        # ========================================================
+
+        elif request.outfit_id is not None:
+
+            cursor.execute(
+                """
+                SELECT id
+                FROM outfits
+                WHERE id = %s
+                  AND user_id = %s
+                LIMIT 1
+                """,
+                (
+                    request.outfit_id,
+                    user_id,
+                ),
+            )
+
+            existing_outfit = cursor.fetchone()
+
+            if existing_outfit is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Outfit not found.",
+                )
+
+            new_outfit_id = request.outfit_id
+
+        else:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Please provide either "
+                    "outfit_id or item_ids."
+                ),
+            )
+
+        # ========================================================
+        # 4. UPDATE EXISTING HISTORY RECORD
+        # ========================================================
+
+        cursor.execute(
+            """
+            UPDATE outfit_history
+            SET
+                outfit_id = %s,
+                worn_date = %s,
+                notes = %s
+            WHERE id = %s
+              AND user_id = %s
+            """,
+            (
+                new_outfit_id,
+                request.worn_date,
+                request.notes or None,
+                history_id,
+                user_id,
+            ),
+        )
+
+        connection.commit()
+
+        print(
+            f"✓ Outfit history updated: "
+            f"history_id={history_id}, "
+            f"old_outfit={old_outfit_id}, "
+            f"new_outfit={new_outfit_id}, "
+            f"date={request.worn_date}"
+        )
+
+        return {
+            "success": True,
+            "history_id": history_id,
+            "outfit_id": new_outfit_id,
+            "message": "Outfit history updated successfully.",
+        }
+
+    except HTTPException:
+
+        if connection is not None:
+            connection.rollback()
+
+        raise
+
+    except Exception as e:
+
+        if connection is not None:
+            connection.rollback()
+
+        print(
+            "❌ UPDATE OUTFIT HISTORY ERROR:",
+            e,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+    finally:
+
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None:
+            connection.close()
+
+
+@app.delete("/outfit-history/{history_id}")
+def delete_outfit_history(
+    history_id: int,
+):
+    connection = None
+    cursor = None
+
+    try:
+        user_id = 1
+
+        connection = get_connection()
+        cursor = connection.cursor()
+
+        # ========================================================
+        # 1. Check history belongs to current user
+        # ========================================================
+
+        cursor.execute(
+            """
+            SELECT id
+            FROM outfit_history
+            WHERE id = %s
+              AND user_id = %s
+            LIMIT 1
+            """,
+            (
+                history_id,
+                user_id,
+            ),
+        )
+
+        history = cursor.fetchone()
+
+        if history is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Outfit history not found.",
+            )
+
+        # ========================================================
+        # 2. Delete only the history record
+        # ========================================================
+
+        cursor.execute(
+            """
+            DELETE FROM outfit_history
+            WHERE id = %s
+              AND user_id = %s
+            """,
+            (
+                history_id,
+                user_id,
+            ),
+        )
+
+        # ========================================================
+        # 3. Commit
+        # ========================================================
+
+        connection.commit()
+
+        print(
+            f"✓ Outfit history deleted: "
+            f"history_id={history_id}"
+        )
+
+        return {
+            "success": True,
+            "history_id": history_id,
+            "message": "Outfit history deleted successfully.",
+        }
+
+    except HTTPException:
+
+        if connection is not None:
+            connection.rollback()
+
+        raise
+
+    except Exception as e:
+
+        if connection is not None:
+            connection.rollback()
+
+        print(
+            "❌ DELETE OUTFIT HISTORY ERROR:",
+            e,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+    finally:
+
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None:
+            connection.close()
+            
 # -------------------------------------------------------------------
 # Run directly
 # -------------------------------------------------------------------

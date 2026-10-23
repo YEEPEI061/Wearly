@@ -14,7 +14,16 @@ class RecordOutfitPage extends StatefulWidget {
   final ClothingItem? topItem;
   final ClothingItem? bottomItem;
 
-  const RecordOutfitPage({super.key, this.topItem, this.bottomItem});
+  final Map<String, dynamic>? history;
+
+  const RecordOutfitPage({
+    super.key,
+    this.topItem,
+    this.bottomItem,
+    this.history,
+  });
+
+  bool get isEditing => history != null;
 
   @override
   State<RecordOutfitPage> createState() => _RecordOutfitPageState();
@@ -63,6 +72,7 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
   // ============================================================
 
   @override
+  @override
   void initState() {
     super.initState();
 
@@ -75,6 +85,106 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
     _topItem = widget.topItem;
     _bottomItem = widget.bottomItem;
     _fullItem = null;
+
+    if (widget.isEditing) {
+      _loadExistingHistory();
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        if (_outfitPreviewUrl == null || _outfitPreviewUrl!.isEmpty) {
+          _generateSelectedOutfitPreview();
+        }
+      });
+    }
+  }
+
+  void _loadExistingHistory() {
+    final history = widget.history;
+
+    if (history == null) return;
+
+    // --------------------------------------------------------
+    // DATE
+    // --------------------------------------------------------
+
+    final wornDate = history['worn_date']?.toString();
+
+    if (wornDate != null && wornDate.isNotEmpty) {
+      _selectedDate = DateTime.parse(wornDate);
+    }
+
+    // --------------------------------------------------------
+    // ITEMS
+    // --------------------------------------------------------
+
+    final historyItems = List<Map<String, dynamic>>.from(
+      history['items'] ?? [],
+    );
+
+    for (final itemData in historyItems) {
+      final item = ClothingItem.fromJson(itemData);
+
+      final category = item.category.toLowerCase();
+
+      if (category == 'upper') {
+        _topItem = item;
+      } else if (category == 'lower') {
+        _bottomItem = item;
+      } else if (category == 'full') {
+        _fullItem = item;
+        _topItem = null;
+        _bottomItem = null;
+      }
+    }
+
+    // --------------------------------------------------------
+    // NOTES + VIBES
+    // --------------------------------------------------------
+
+    final savedNotes = history['notes']?.toString().trim() ?? '';
+
+    if (savedNotes.isNotEmpty) {
+      _restoreNotesAndVibes(savedNotes);
+    }
+
+    // --------------------------------------------------------
+    // EXISTING OUTFIT PREVIEW
+    // --------------------------------------------------------
+
+    final imageUrl = history['image_url']?.toString();
+
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      _outfitPreviewUrl = imageUrl;
+    }
+  }
+
+  void _restoreNotesAndVibes(String savedNotes) {
+    final parts = savedNotes.split(RegExp(r'\r?\n\s*\r?\n'));
+
+    final firstPart = parts.isNotEmpty ? parts.first.trim() : '';
+
+    final savedVibes = firstPart
+        .split('•')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+
+    final recognisedVibes = savedVibes.where((vibe) => _vibes.contains(vibe));
+
+    _selectedVibes.addAll(recognisedVibes);
+
+    final allFirstPartAreVibes =
+        savedVibes.isNotEmpty &&
+        savedVibes.every((vibe) => _vibes.contains(vibe));
+
+    if (allFirstPartAreVibes) {
+      if (parts.length > 1) {
+        _noteController.text = parts.skip(1).join('\n\n').trim();
+      }
+    } else {
+      _noteController.text = savedNotes;
+    }
   }
 
   @override
@@ -184,7 +294,9 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
       body: SafeArea(
         child: Column(
           children: [
-            const AppPageHeader(title: 'RECORD OUTFIT'),
+            AppPageHeader(
+              title: widget.isEditing ? 'EDIT OUTFIT' : 'RECORD OUTFIT',
+            ),
 
             Expanded(
               child: SingleChildScrollView(
@@ -255,14 +367,16 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
         const SizedBox(height: 8),
 
         Text(
-          'Record Today\'s Ensemble',
+          widget.isEditing ? 'Edit Your Ensemble' : 'Record Today\'s Ensemble',
           style: AppTextStyles.headlineLarge.copyWith(color: AppColors.primary),
         ),
 
         const SizedBox(height: 6),
 
         Text(
-          'Preserve the look, mood, and pieces that carried you through the day.',
+          widget.isEditing
+              ? 'Update the pieces, date, impressions, or notes for this recorded look.'
+              : 'Preserve the look, mood, and pieces that carried you through the day.',
           style: AppTextStyles.bodyMedium.copyWith(
             color: AppColors.onSurfaceVariant,
           ),
@@ -844,6 +958,20 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
           },
         ),
       );
+    }
+    // --------------------------------------------------------
+    // TOP + BOTTOM
+    // Preview should normally be generated by backend.
+    // Show loading while waiting.
+    // --------------------------------------------------------
+    else if (_topItem != null && _bottomItem != null) {
+      preview = _buildOutfitPreviewLoading();
+    }
+    // --------------------------------------------------------
+    // FULL ITEM
+    // --------------------------------------------------------
+    else if (_fullItem != null) {
+      preview = _buildSingleClothingPreview(_fullItem!);
     }
     // --------------------------------------------------------
     // TOP ONLY
@@ -1539,40 +1667,200 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
   // ============================================================
 
   Widget _buildSaveButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 54,
-      child: ElevatedButton.icon(
-        onPressed: _isSaving ? null : _saveOutfit,
-        icon: _isSaving
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.white,
-                ),
-              )
-            : const Icon(Icons.history_edu, size: 20),
-        label: Text(
-          _isSaving ? 'SAVING OUTFIT...' : 'SAVE TO OUTFIT HISTORY',
-          style: AppTextStyles.labelMedium.copyWith(
-            color: AppColors.white,
-            letterSpacing: 1.0,
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton.icon(
+            onPressed: _isSaving ? null : _saveOutfit,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.white,
+                    ),
+                  )
+                : const Icon(Icons.history_edu, size: 20),
+            label: Text(
+              _isSaving
+                  ? widget.isEditing
+                        ? 'UPDATING OUTFIT...'
+                        : 'SAVING OUTFIT...'
+                  : widget.isEditing
+                  ? 'UPDATE OUTFIT HISTORY'
+                  : 'SAVE TO OUTFIT HISTORY',
+              style: AppTextStyles.labelMedium.copyWith(
+                color: AppColors.white,
+                letterSpacing: 1.0,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.white,
+              disabledBackgroundColor: AppColors.primary,
+              disabledForegroundColor: AppColors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+              ),
+            ),
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
-          disabledBackgroundColor: AppColors.primary,
-          disabledForegroundColor: AppColors.white,
-          elevation: 0,
+
+        // ========================================================
+        // DELETE HISTORY
+        // Only shown when editing an existing history entry
+        // ========================================================
+        if (widget.isEditing) ...[
+          const SizedBox(height: 12),
+
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: _isSaving ? null : _deleteHistory,
+              icon: const Icon(Icons.delete_outline, size: 20),
+              label: Text(
+                'DELETE OUTFIT HISTORY',
+                style: AppTextStyles.labelMedium.copyWith(
+                  color: Colors.red.shade700,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade700,
+                side: BorderSide(color: Colors.red.shade700),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _deleteHistory() async {
+    if (!widget.isEditing) return;
+
+    final historyId = (widget.history!['history_id'] as num).toInt();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.background,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.medium),
           ),
-        ),
-      ),
+          contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_outline, size: 28, color: Colors.red.shade700),
+
+              const SizedBox(height: 10),
+
+              Text(
+                'Delete Outfit History?',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyLarge.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+
+              const SizedBox(height: 6),
+
+              Text(
+                'This outfit will be removed from history.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, false);
+                    },
+                    child: Text(
+                      'CANCEL',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 20),
+
+                  Container(
+                    width: 1,
+                    height: 20,
+                    color: AppColors.onSurfaceVariant.withOpacity(0.25),
+                  ),
+
+                  const SizedBox(width: 20),
+
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, true);
+                    },
+                    child: Text(
+                      'DELETE',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await ApiService.deleteOutfitHistory(historyId: historyId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      _showTopSuccessMessage('Outfit history deleted.');
+
+      await Future.delayed(const Duration(milliseconds: 700));
+
+      if (!mounted) return;
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      _showError(e.toString().replaceFirst('Exception: ', ''));
+    }
   }
 
   String _buildFinalNote() {
@@ -1619,11 +1907,24 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
     });
 
     try {
-      final saveFuture = ApiService.saveOutfitHistory(
-        itemIds: itemIds,
-        wornDate: _selectedDate,
-        notes: finalNote,
-      );
+      late final Future<void> saveFuture;
+
+      if (widget.isEditing) {
+        final historyId = (widget.history!['history_id'] as num).toInt();
+
+        saveFuture = ApiService.updateOutfitHistory(
+          historyId: historyId,
+          itemIds: itemIds,
+          wornDate: _selectedDate,
+          notes: finalNote,
+        );
+      } else {
+        saveFuture = ApiService.saveOutfitHistory(
+          itemIds: itemIds,
+          wornDate: _selectedDate,
+          notes: finalNote,
+        );
+      }
 
       await Future.wait([
         saveFuture,
@@ -1636,7 +1937,11 @@ class _RecordOutfitPageState extends State<RecordOutfitPage> {
         _isSaving = false;
       });
 
-      _showTopSuccessMessage('Outfit recorded successfully.');
+      _showTopSuccessMessage(
+        widget.isEditing
+            ? 'Outfit history updated.'
+            : 'Outfit recorded successfully.',
+      );
 
       await Future.delayed(const Duration(milliseconds: 700));
 

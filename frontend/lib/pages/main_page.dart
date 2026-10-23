@@ -26,7 +26,7 @@ class _MainPageState extends State<MainPage> {
     super.initState();
 
     _pages = [
-      const HomePage(),
+      HomePage(onNavigateToTab: _onBottomNavTap),
       const WardrobePage(),
       const StylistStartPage(),
       HistoryPage(key: _historyKey),

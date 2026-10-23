@@ -2,22 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_header.dart';
 import 'package:frontend/pages/travel_outfit_planner_page.dart';
+import 'package:frontend/pages/wardrobe_page.dart';
+import 'package:frontend/pages/stylist_page.dart';
+import 'package:frontend/services/api_service.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final void Function(int index)? onNavigateToTab;
+
+  const HomePage({super.key, this.onNavigateToTab});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  bool _isSaved = false;
-
   // ============================================================
   // WEATHER
   // ============================================================
@@ -27,24 +31,45 @@ class _HomePageState extends State<HomePage> {
   IconData _weatherIcon = Icons.cloud_outlined;
 
   // ============================================================
-  // IMAGES
+  // WARDROBE
   // ============================================================
 
-  // Mock data for frontend development.
-  // These will be connected to the backend later.
-  final String _heroImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuA9mKLdSK_xMjuuJesWEk0kMOydg8pkm6K8Z70N3jthxlFcZOPZC1LgztsH2RxpM463APF9EmJgJ2UB5-Wau_BrVDP0pmgwpDj-Tq7Iq1u13oxwT-toscxH4m6sSWEZdP_C2j8yZXoB65FmcQvmzokDiep8kwKuNQM3e6U_inUJRnhOm1Hhc2mmyp5IKidHHMDNi4fI60bwZdCkzCDpagE8UtPSp--z_57s03bmmcFtGtwy3zX17A90';
+  String? _heroImageUrl;
+  String _totalPieces = '--';
+  String _itemsWorn = '-- / --';
+  String _rotationRate = '--%';
 
-  final String _recentImage1 =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDAxTkCyvtBSxmH7U_oKEWhoPVpwoJgsSqmgcyYuBqt78UIq2LlWlbkzmfLnRYfP8J0Y1iBrRlaK0z4uSGPAOs0FClzjg2FtEyBV7zhywyOXGuOZEMLTx29VEolAyDzDPHPhTMK9679alN_LMHLJBsj7pbBtPC4MH3ieTtQP7UTW0FIiMlTD5ngEc4GNW0zcfrCigP-Dpl6ByflAhmtIfOWYMnvCcokunf9ZKdn4FoAoBgFhTeRiJes';
+  bool _isLoadingWardrobe = true;
+  bool _isLoadingAnalytics = true;
 
-  final String _recentImage2 =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAS5zmS-c2eAdaXsEKF7oENaBti8sQxEG7ILc40MQNAQl977BxeMPDzReUyiscJh1VAUNtbaHLR_BToDGbbEmIWlT9_y1oxOw2ob2g6n2QorNmhW3lnV-hF2s3gfBz3TRME1hZ2pRu2YWqc0U4y_6nXk03Z1p-VKcbxlwTQ25xh6q1WuDlMD2AnjYENPBpSuEfxxoP2nYi5qcgS9gyNp19IA7cRzI9ZpN97EEb-9-C9ZUqipCOeDVXZ';
+  // ============================================================
+  // RECENT OUTFITS
+  // ============================================================
+
+  List<Map<String, dynamic>> _recentOutfits = [];
+
+  bool _isLoadingRecentOutfits = true;
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
+
     _loadWeather();
+    _loadWardrobe();
+    _loadHomeAnalytics();
+  }
+
+  // ============================================================
+  // REFRESH
+  // ============================================================
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
   }
 
   // ============================================================
@@ -138,6 +163,208 @@ class _HomePageState extends State<HomePage> {
   }
 
   // ============================================================
+  // WARDROBE
+  // ============================================================
+
+  Future<void> _loadWardrobe() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiService.baseUrl}/wardrobe'),
+      );
+
+      print(
+        'HOME WARDROBE STATUS: '
+        '${response.statusCode}',
+      );
+
+      print(
+        'HOME WARDROBE RESPONSE: '
+        '${response.body}',
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load wardrobe.');
+      }
+
+      final decoded = jsonDecode(response.body);
+
+      List<dynamic> items;
+
+      if (decoded is List) {
+        items = decoded;
+      } else if (decoded is Map && decoded['items'] is List) {
+        items = decoded['items'];
+      } else if (decoded is Map && decoded['clothing_items'] is List) {
+        items = decoded['clothing_items'];
+      } else {
+        items = [];
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingWardrobe = false;
+
+        _totalPieces = items.length.toString();
+
+        if (items.isNotEmpty) {
+          final firstItem = Map<String, dynamic>.from(items.first);
+
+          final processedPath = firstItem['processed_image_path']?.toString();
+
+          final imagePath = firstItem['image_path']?.toString();
+
+          final selectedPath = processedPath != null && processedPath.isNotEmpty
+              ? processedPath
+              : imagePath;
+
+          if (selectedPath != null && selectedPath.isNotEmpty) {
+            _heroImageUrl = _buildImageUrl(selectedPath);
+          }
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingWardrobe = false;
+        _totalPieces = '--';
+        _heroImageUrl = null;
+      });
+
+      debugPrint('Home wardrobe error: $e');
+    }
+  }
+
+  String _buildImageUrl(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+
+    if (path.startsWith('/')) {
+      return '${ApiService.baseUrl}$path';
+    }
+
+    return '${ApiService.baseUrl}/$path';
+  }
+
+  // ============================================================
+  // HOME ANALYTICS + RECENT OUTFITS
+  // ============================================================
+
+  Future<void> _loadHomeAnalytics() async {
+    final now = DateTime.now();
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '${ApiService.baseUrl}/outfit-history'
+          '?year=${now.year}'
+          '&month=${now.month}',
+        ),
+      );
+
+      print(
+        'HOME HISTORY STATUS: '
+        '${response.statusCode}',
+      );
+
+      print(
+        'HOME HISTORY RESPONSE: '
+        '${response.body}',
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load outfit history.');
+      }
+
+      final data = jsonDecode(response.body);
+
+      List<Map<String, dynamic>> history = [];
+
+      if (data is Map && data['history'] is List) {
+        history = List<Map<String, dynamic>>.from(
+          (data['history'] as List).map(
+            (item) => Map<String, dynamic>.from(item),
+          ),
+        );
+      } else if (data is List) {
+        history = List<Map<String, dynamic>>.from(
+          data.map((item) => Map<String, dynamic>.from(item)),
+        );
+      }
+
+      // --------------------------------------------------------
+      // ANALYTICS
+      // --------------------------------------------------------
+
+      int totalActiveItems = 0;
+      int usedItems = 0;
+      int rotationRate = 0;
+
+      if (data is Map) {
+        totalActiveItems = (data['total_active_items'] as num?)?.toInt() ?? 0;
+
+        usedItems = (data['used_items'] as num?)?.toInt() ?? 0;
+
+        rotationRate = (data['rotation_rate'] as num?)?.toInt() ?? 0;
+      }
+
+      // --------------------------------------------------------
+      // SORT RECENT OUTFITS
+      // --------------------------------------------------------
+
+      history.sort((a, b) {
+        final dateA = DateTime.tryParse(a['worn_date']?.toString() ?? '');
+
+        final dateB = DateTime.tryParse(b['worn_date']?.toString() ?? '');
+
+        if (dateA == null && dateB == null) {
+          return 0;
+        }
+
+        if (dateA == null) {
+          return 1;
+        }
+
+        if (dateB == null) {
+          return -1;
+        }
+
+        return dateB.compareTo(dateA);
+      });
+
+      final recent = history.take(2).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingAnalytics = false;
+        _isLoadingRecentOutfits = false;
+
+        _itemsWorn = '$usedItems / $totalActiveItems';
+
+        _rotationRate = '$rotationRate%';
+
+        _recentOutfits = recent;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingAnalytics = false;
+        _isLoadingRecentOutfits = false;
+
+        _itemsWorn = '-- / --';
+        _rotationRate = '--%';
+        _recentOutfits = [];
+      });
+
+      debugPrint('Home history error: $e');
+    }
+  }
+
+  // ============================================================
   // GREETING
   // ============================================================
 
@@ -162,31 +389,21 @@ class _HomePageState extends State<HomePage> {
   // ============================================================
 
   void _viewAllHistory() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Full outfit history will be connected later.'),
-      ),
-    );
+    widget.onNavigateToTab?.call(3);
   }
 
-  void _wearToday() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Outfit selected for today.')));
+  void _openWardrobe() {
+    widget.onNavigateToTab?.call(1);
+  }
+
+  void _styleAnOutfit() {
+    widget.onNavigateToTab?.call(2);
   }
 
   void _openTravelPlanner() {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const TravelOutfitPlannerPage()),
-    );
-  }
-
-  void _swapItems() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('AI outfit swapping will be connected later.'),
-      ),
     );
   }
 
@@ -217,6 +434,7 @@ class _HomePageState extends State<HomePage> {
                     // Navigate to Profile
                   },
                 ),
+
                 // ========================================================
                 // CONTENT
                 // ========================================================
@@ -226,15 +444,15 @@ class _HomePageState extends State<HomePage> {
                     delegate: SliverChildListDelegate([
                       _buildGreeting(),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
                       _buildHeroCard(),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
                       _buildAnalytics(),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
                       _buildWeatherInsight(),
 
@@ -242,7 +460,7 @@ class _HomePageState extends State<HomePage> {
 
                       _buildTravelCapsule(),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
                       _buildRecentOutfits(),
                     ]),
@@ -358,22 +576,13 @@ class _HomePageState extends State<HomePage> {
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
+          // ========================================================
+          // REAL WARDROBE IMAGE
+          // ========================================================
           Positioned.fill(
-            child: Image.network(
-              _heroImage,
+            child: Image.asset(
+              'assets/images/home_page.png',
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) {
-                return Container(
-                  color: AppColors.surfaceContainerHigh,
-                  child: const Center(
-                    child: Icon(
-                      Icons.image_outlined,
-                      size: 40,
-                      color: AppColors.outline,
-                    ),
-                  ),
-                );
-              },
             ),
           ),
 
@@ -385,7 +594,7 @@ class _HomePageState extends State<HomePage> {
                   end: Alignment.bottomCenter,
                   colors: [
                     AppColors.primary.withOpacity(0.15),
-                    AppColors.primary.withOpacity(0.45),
+                    AppColors.primary.withOpacity(0.48),
                     AppColors.primary.withOpacity(0.97),
                   ],
                   stops: const [0.0, 0.42, 1.0],
@@ -399,6 +608,9 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ==================================================
+                // TOP LABEL
+                // ==================================================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -412,31 +624,10 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(AppRadius.small),
                       ),
                       child: Text(
-                        "TODAY'S EDITORIAL PICK",
+                        'YOUR WARDROBE',
                         style: AppTextStyles.labelSmall.copyWith(
                           color: AppColors.primary,
                           letterSpacing: 1.0,
-                        ),
-                      ),
-                    ),
-
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isSaved = !_isSaved;
-                        });
-                      },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: AppColors.white.withOpacity(0.90),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          _isSaved ? Icons.bookmark : Icons.bookmark_border,
-                          size: 20,
-                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -445,8 +636,11 @@ class _HomePageState extends State<HomePage> {
 
                 const Spacer(),
 
+                // ==================================================
+                // HERO TEXT
+                // ==================================================
                 Text(
-                  'BUSINESS CASUAL • 18°C & BREEZY',
+                  'YOUR PERSONAL COLLECTION',
                   style: AppTextStyles.labelMedium.copyWith(
                     color: AppColors.primaryDim,
                     letterSpacing: 1.2,
@@ -456,8 +650,8 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 8),
 
                 Text(
-                  'The Monochromatic Trench',
-                  style: AppTextStyles.headlineLarge.copyWith(
+                  'Explore What You Own',
+                  style: AppTextStyles.headlineMedium.copyWith(
                     color: AppColors.white,
                   ),
                 ),
@@ -465,8 +659,9 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 8),
 
                 Text(
-                  'A refined balance of structure and ease, '
-                  'designed for a polished day in the city.',
+                  'Explore your personal collection '
+                  'and discover new ways to style '
+                  'what you own.',
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.white.withOpacity(0.88),
                   ),
@@ -474,13 +669,26 @@ class _HomePageState extends State<HomePage> {
 
                 const SizedBox(height: 20),
 
+                // ==================================================
+                // ACTION BUTTONS
+                // ==================================================
                 Row(
                   children: [
                     Expanded(
                       child: SizedBox(
                         height: 46,
-                        child: ElevatedButton(
-                          onPressed: _wearToday,
+                        child: ElevatedButton.icon(
+                          onPressed: _openWardrobe,
+                          icon: const Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: Icon(Icons.checkroom_outlined, size: 19),
+                          ),
+                          label: Text(
+                            'VIEW WARDROBE',
+                            style: AppTextStyles.labelMedium.copyWith(
+                              color: AppColors.primary,
+                            ),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.white,
                             foregroundColor: AppColors.primary,
@@ -489,12 +697,6 @@ class _HomePageState extends State<HomePage> {
                               borderRadius: BorderRadius.circular(
                                 AppRadius.medium,
                               ),
-                            ),
-                          ),
-                          child: Text(
-                            'WEAR TODAY',
-                            style: AppTextStyles.labelMedium.copyWith(
-                              color: AppColors.primary,
                             ),
                           ),
                         ),
@@ -506,8 +708,18 @@ class _HomePageState extends State<HomePage> {
                     Expanded(
                       child: SizedBox(
                         height: 46,
-                        child: OutlinedButton(
-                          onPressed: _swapItems,
+                        child: OutlinedButton.icon(
+                          onPressed: _styleAnOutfit,
+                          icon: const Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: Icon(Icons.auto_awesome_outlined, size: 19),
+                          ),
+                          label: Text(
+                            'STYLE AN OUTFIT',
+                            style: AppTextStyles.labelMedium.copyWith(
+                              color: AppColors.white,
+                            ),
+                          ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.white,
                             side: BorderSide(
@@ -519,12 +731,6 @@ class _HomePageState extends State<HomePage> {
                               ),
                             ),
                           ),
-                          child: Text(
-                            'SWAP ITEMS',
-                            style: AppTextStyles.labelMedium.copyWith(
-                              color: AppColors.white,
-                            ),
-                          ),
                         ),
                       ),
                     ),
@@ -534,6 +740,19 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHeroPlaceholder() {
+    return Container(
+      color: AppColors.surfaceContainerHigh,
+      child: const Center(
+        child: Icon(
+          Icons.checkroom_outlined,
+          size: 40,
+          color: AppColors.outline,
+        ),
       ),
     );
   }
@@ -573,11 +792,11 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: _buildStatCard(
                 icon: Icons.checkroom_outlined,
-                badge: '+4 NEW',
-                value: '142',
+                badge: _isLoadingWardrobe ? '--' : 'WARDROBE',
+                value: _totalPieces,
                 label: 'TOTAL PIECES',
-                badgeColor: const Color(0xFFE0F2E8),
-                badgeTextColor: const Color(0xFF218653),
+                badgeColor: AppColors.secondary.withOpacity(0.35),
+                badgeTextColor: AppColors.primary,
               ),
             ),
 
@@ -586,10 +805,10 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: _buildStatCard(
                 icon: Icons.auto_awesome,
-                badge: '94%',
-                value: '28 / 30',
+                badge: _rotationRate,
+                value: _itemsWorn,
                 label: 'ITEMS WORN',
-                badgeColor: AppColors.primary.withOpacity(0.35),
+                badgeColor: AppColors.secondary.withOpacity(0.35),
                 badgeTextColor: AppColors.primary,
               ),
             ),
@@ -719,9 +938,10 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 2),
 
                 Text(
-                  "We swapped your suede loafers for "
-                  "water-resistant leather boots in "
-                  "today's recommendation.",
+                  "We recommend checking "
+                  "your wardrobe for "
+                  "weather-friendly pieces "
+                  "before heading out.",
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.onSurfaceVariant,
                   ),
@@ -881,36 +1101,42 @@ class _HomePageState extends State<HomePage> {
 
         const SizedBox(height: 16),
 
-        _buildRecentOutfitCard(
-          imageUrl: _recentImage1,
-          date: 'YESTERDAY',
-          title: 'Evening Dinner & Gallery',
-          description: 'Silk slip dress • Oversized blazer',
-          isFavorite: true,
-        ),
-
-        const SizedBox(height: 16),
-
-        _buildRecentOutfitCard(
-          imageUrl: _recentImage2,
-          date: 'SATURDAY',
-          title: 'Weekend Brunch',
-          description: 'Raw denim • Poplin shirt • Sneakers',
-          isFavorite: false,
-        ),
+        if (_isLoadingRecentOutfits)
+          _buildRecentOutfitLoadingCard()
+        else if (_recentOutfits.isEmpty)
+          _buildNoRecentOutfits()
+        else
+          ..._recentOutfits
+              .map((outfit) => _buildRecentOutfitCard(outfit))
+              .toList(),
       ],
     );
   }
 
-  Widget _buildRecentOutfitCard({
-    required String imageUrl,
-    required String date,
-    required String title,
-    required String description,
-    required bool isFavorite,
-  }) {
+  Widget _buildRecentOutfitCard(Map<String, dynamic> outfit) {
+    final imagePath = outfit['image_url']?.toString();
+
+    final imageUrl = imagePath != null && imagePath.isNotEmpty
+        ? _buildImageUrl(imagePath)
+        : null;
+
+    final wornDate = DateTime.tryParse(outfit['worn_date']?.toString() ?? '');
+
+    final date = wornDate != null
+        ? DateFormat('MMM d').format(wornDate).toUpperCase()
+        : 'RECENT';
+
+    final title = outfit['title']?.toString() ?? 'Recorded Outfit';
+
+    final items = outfit['items'] is List
+        ? List<dynamic>.from(outfit['items'])
+        : <dynamic>[];
+
+    final description = _buildOutfitDescription(items);
+
     return Container(
       height: 112,
+      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerMedium,
@@ -927,23 +1153,17 @@ class _HomePageState extends State<HomePage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.small),
-            child: Image.network(
-              imageUrl,
-              width: 64,
-              height: 80,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) {
-                return Container(
-                  width: 64,
-                  height: 80,
-                  color: AppColors.surfaceContainerHigh,
-                  child: const Icon(
-                    Icons.image_outlined,
-                    color: AppColors.outline,
-                  ),
-                );
-              },
-            ),
+            child: imageUrl != null
+                ? Image.network(
+                    imageUrl,
+                    width: 64,
+                    height: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) {
+                      return _buildRecentImagePlaceholder();
+                    },
+                  )
+                : _buildRecentImagePlaceholder(),
           ),
 
           const SizedBox(width: 16),
@@ -952,28 +1172,16 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        date,
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
+                const SizedBox(height: 4),
 
-                    Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      size: 18,
-                      color: isFavorite
-                          ? AppColors.primary
-                          : AppColors.onSurfaceVariant,
-                    ),
-                  ],
+                Text(
+                  date,
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
                 ),
 
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
 
                 Text(
                   title,
@@ -984,17 +1192,100 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
 
-                const SizedBox(height: 2),
+                const SizedBox(height: 6),
 
                 Text(
                   description,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.onSurfaceVariant,
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _buildOutfitDescription(List<dynamic> items) {
+    if (items.isEmpty) {
+      return 'No clothing items';
+    }
+
+    final names = items
+        .map((item) {
+          if (item is Map<String, dynamic>) {
+            return item['name']?.toString() ?? '';
+          }
+
+          if (item is Map) {
+            return item['name']?.toString() ?? '';
+          }
+
+          return '';
+        })
+        .where((name) => name.isNotEmpty)
+        .toList();
+
+    if (names.isEmpty) {
+      return 'No clothing items';
+    }
+
+    return names.join(' • ');
+  }
+
+  Widget _buildRecentImagePlaceholder() {
+    return Container(
+      width: 64,
+      height: 80,
+      color: AppColors.surfaceContainerHigh,
+      child: const Icon(Icons.checkroom_outlined, color: AppColors.outline),
+    );
+  }
+
+  Widget _buildRecentOutfitLoadingCard() {
+    return Container(
+      height: 112,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerMedium,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoRecentOutfits() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerMedium,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.history_outlined,
+            size: 28,
+            color: AppColors.outline,
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            'No recent outfits yet.',
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.onSurfaceVariant,
             ),
           ),
         ],

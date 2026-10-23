@@ -413,4 +413,68 @@ class ApiService {
 
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
+
+  static Future<Map<String, dynamic>> updateOutfitHistory({
+    required int historyId,
+    required List<String> itemIds,
+    required DateTime wornDate,
+    required String notes,
+  }) async {
+    final date =
+        '${wornDate.year.toString().padLeft(4, '0')}-'
+        '${wornDate.month.toString().padLeft(2, '0')}-'
+        '${wornDate.day.toString().padLeft(2, '0')}';
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/outfit-history/$historyId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'item_ids': itemIds,
+        'worn_date': date,
+        'notes': notes,
+      }),
+    );
+
+    print(
+      'UPDATE OUTFIT HISTORY STATUS: '
+      '${response.statusCode}',
+    );
+
+    print(
+      'UPDATE OUTFIT HISTORY RESPONSE: '
+      '${response.body}',
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to update outfit history: '
+        '${response.body}',
+      );
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  static Future<void> deleteOutfitHistory({required int historyId}) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/outfit-history/$historyId'),
+    );
+
+    print(
+      'DELETE OUTFIT HISTORY STATUS: '
+      '${response.statusCode}',
+    );
+
+    print(
+      'DELETE OUTFIT HISTORY RESPONSE: '
+      '${response.body}',
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to delete outfit history: '
+        '${response.body}',
+      );
+    }
+  }
 }

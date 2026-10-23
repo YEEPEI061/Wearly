@@ -528,8 +528,6 @@ class _StylistPageState extends State<StylistPage>
 
     final items = recommendation['items'] as List<dynamic>? ?? [];
 
-    final reason = recommendation['reason']?.toString() ?? '';
-
     return AnimatedSlide(
       duration: const Duration(milliseconds: 450),
       curve: Curves.easeOut,

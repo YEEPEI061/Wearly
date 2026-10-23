@@ -892,31 +892,51 @@ class HistoryPageState extends State<HistoryPage> {
           const SizedBox(width: 12),
 
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHistoryImages(items),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                _editHistory(history);
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHistoryImages(items),
 
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
 
-                  Text(
-                    title,
-                    style: AppTextStyles.headlineSmall.copyWith(
-                      color: AppColors.primary,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: AppTextStyles.headlineSmall.copyWith(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+
+                        const Icon(
+                          Icons.chevron_right,
+                          size: 20,
+                          color: AppColors.outline,
+                        ),
+                      ],
                     ),
-                  ),
 
-                  const SizedBox(height: 2),
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 2),
 
-                  Text(
-                    description,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+                      Text(
+                        description,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1122,6 +1142,17 @@ class HistoryPageState extends State<HistoryPage> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const RecordOutfitPage()),
+    );
+
+    if (result == true && mounted) {
+      await _loadHistory();
+    }
+  }
+
+  Future<void> _editHistory(Map<String, dynamic> history) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => RecordOutfitPage(history: history)),
     );
 
     if (result == true && mounted) {

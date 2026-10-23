@@ -752,7 +752,7 @@ class _ProfilePageState extends State<ProfilePage> {
         const SizedBox(height: 14),
 
         Text(
-          'WEARLY • BOUTIQUE CAPSULE EDITION V2.4.0',
+          'WEARLY • PERSONAL STYLE INTELLIGENCE',
           textAlign: TextAlign.center,
           style: AppTextStyles.labelSmall.copyWith(
             color: AppColors.onSurfaceVariant,
