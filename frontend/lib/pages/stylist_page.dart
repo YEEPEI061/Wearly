@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:frontend/pages/virtual_try_on_page.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
@@ -18,18 +19,7 @@ class StylistPage extends StatefulWidget {
 
 class _StylistPageState extends State<StylistPage>
     with SingleTickerProviderStateMixin {
-  // ============================================================
-  // RECOMMENDATION DATA
-  // ============================================================
-
-  final String _tryOnImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuC2Ij6vuxhBGdF26K6qlz2ztH4EB0nVCWpBE1kFauAhoJxGVQJM3UaIbFe8B-zVVWoe_Ntijl9lmSBpE38R3jDysovsRi2lIf9Y19gFxOeemU4sHQD-vmty1fWQWgy6h8Z-vR7k2428Gbkj_R_BxmrhP_RNnLN1lJg03WR7ddmc9LQRCruGTtdF3fry5nAWy26V1eYvFgy7lloeOnFj6xr8P9cSTNF97cD7kpyUkeG7uPLOY_9fi55t';
-
-  final String _captureImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDvB89rz2QmnIQ49madhFclydn6tRAtd1pQDNVytCA8MT_CouU-WYZaiRzryl4U0tWoASDz0GL2nw7J3Unyf5mFwDWs94J9u2dmKVFlhFi882_bucHRWZN7sECeyXYVkGsv2TkMbPWfkBHeLQ-T8uNwKqKFsWlKHhnIeLoAwYloHBV8cGEtI1Z4UMzS6W2ZNvBN0b0Hymeg6X0WWfV9tGKmiZlaXHcX3KnUPb4qzr9zAD0DNdpQPkC';
-
   bool _isAnimatingCard = false;
-  bool _showTryOnResult = false;
 
   List<Map<String, dynamic>> _recommendations = [];
 
@@ -295,36 +285,15 @@ class _StylistPageState extends State<StylistPage>
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _openTryOnModal() {
-    setState(() {
-      _showTryOnResult = false;
-    });
+  void _openVirtualTryOn() {
+    if (_recommendation == null) return;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: AppColors.primary.withOpacity(0.80),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return _buildTryOnSheet(setModalState);
-          },
-        );
-      },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VirtualTryOnPage(outfit: _recommendation!),
+      ),
     );
-  }
-
-  void _simulateCapture(StateSetter setModalState) {
-    setModalState(() {});
-
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-
-      setModalState(() {
-        _showTryOnResult = true;
-      });
-    });
   }
 
   Future<void> _confirmSchedule() async {
@@ -689,7 +658,7 @@ class _StylistPageState extends State<StylistPage>
           child: SizedBox(
             height: 56,
             child: ElevatedButton.icon(
-              onPressed: _openTryOnModal,
+              onPressed: _openVirtualTryOn,
               icon: const Icon(Icons.checkroom, size: 20),
               label: Text(
                 'VIRTUAL TRY-ON',
@@ -1178,376 +1147,6 @@ class _StylistPageState extends State<StylistPage>
 
   int _daysInMonth(DateTime month) {
     return DateTime(month.year, month.month + 1, 0).day;
-  }
-
-  // ============================================================
-  // VIRTUAL TRY-ON SHEET
-  // ============================================================
-
-  Widget _buildTryOnSheet(StateSetter setModalState) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.90,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          child: _showTryOnResult
-              ? _buildTryOnResult()
-              : _buildTryOnCapture(setModalState),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTryOnCapture(StateSetter setModalState) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'VIRTUAL FITTING SUITE',
-                    style: AppTextStyles.labelSmall.copyWith(
-                      color: AppColors.primaryContainer,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Calibrate Your Silhouette',
-                    style: AppTextStyles.headlineMedium.copyWith(
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.close, color: AppColors.onSurface),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        Text(
-          'Position your device 6 feet away. Align your full silhouette within the optical guide below for hyper-realistic draping.',
-          style: AppTextStyles.bodySmall.copyWith(
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Viewfinder
-        Container(
-          width: double.infinity,
-          height: 420,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Image.network(
-                  _captureImage,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) {
-                    return Container(
-                      color: AppColors.surfaceContainerHigh,
-                      child: const Center(
-                        child: Icon(
-                          Icons.person_outline,
-                          size: 80,
-                          color: AppColors.outline,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              Positioned.fill(
-                child: Container(
-                  margin: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: AppColors.outlineVariant,
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 24),
-
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.primary),
-                        ),
-                        child: const Icon(
-                          Icons.face_outlined,
-                          color: AppColors.primary,
-                          size: 20,
-                        ),
-                      ),
-
-                      const Spacer(),
-
-                      Container(
-                        width: 96,
-                        height: 190,
-                        decoration: BoxDecoration(
-                          border: Border(
-                            left: BorderSide(
-                              color: AppColors.primary.withOpacity(0.6),
-                              style: BorderStyle.solid,
-                            ),
-                            right: BorderSide(
-                              color: AppColors.primary.withOpacity(0.6),
-                              style: BorderStyle.solid,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const Spacer(),
-
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        color: AppColors.primary,
-                        child: Text(
-                          'ALIGN SILHOUETTE HERE',
-                          style: AppTextStyles.labelSmall.copyWith(
-                            color: AppColors.white,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Capture buttons
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: () => _simulateCapture(setModalState),
-                  icon: const Icon(Icons.photo_camera),
-                  label: Text(
-                    'CAPTURE PORTRAIT',
-                    style: AppTextStyles.labelMedium.copyWith(
-                      color: AppColors.white,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.small),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            SizedBox(
-              height: 56,
-              child: OutlinedButton(
-                onPressed: () => _simulateCapture(setModalState),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.small),
-                  ),
-                ),
-                child: Text(
-                  'UPLOAD FILE',
-                  style: AppTextStyles.labelMedium.copyWith(
-                    color: AppColors.primary,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // ============================================================
-  // TRY-ON RESULT
-  // ============================================================
-
-  Widget _buildTryOnResult() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'VIRTUAL FITTING SUITE',
-                    style: AppTextStyles.labelSmall.copyWith(
-                      color: AppColors.primaryContainer,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Your Virtual Fit',
-                    style: AppTextStyles.headlineMedium.copyWith(
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.close, color: AppColors.onSurface),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        Container(
-          width: double.infinity,
-          height: 420,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Image.network(
-                  _tryOnImage,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) {
-                    return const Center(
-                      child: Icon(
-                        Icons.image_outlined,
-                        size: 64,
-                        color: AppColors.outline,
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              Positioned(
-                left: 16,
-                bottom: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  color: AppColors.background.withOpacity(0.92),
-                  child: Text(
-                    'DRAPE ACCURACY: 99.4%',
-                    style: AppTextStyles.labelMedium.copyWith(
-                      color: AppColors.primary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        Text(
-          'Your virtual fit is ready. Fabric drape and sizing have been calibrated to your measurements.',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.onSurface),
-        ),
-
-        const SizedBox(height: 16),
-
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.small),
-              ),
-            ),
-            child: Text(
-              'RETURN TO STYLIST FEED',
-              style: AppTextStyles.labelMedium.copyWith(
-                color: AppColors.white,
-                letterSpacing: 1.0,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildRecommendationError() {

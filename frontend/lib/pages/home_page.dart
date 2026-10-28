@@ -8,8 +8,6 @@ import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
 import 'package:frontend/widgets/app_header.dart';
 import 'package:frontend/pages/travel_outfit_planner_page.dart';
-import 'package:frontend/pages/wardrobe_page.dart';
-import 'package:frontend/pages/stylist_page.dart';
 import 'package:frontend/services/api_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -34,13 +32,11 @@ class _HomePageState extends State<HomePage> {
   // WARDROBE
   // ============================================================
 
-  String? _heroImageUrl;
   String _totalPieces = '--';
   String _itemsWorn = '-- / --';
   String _rotationRate = '--%';
 
   bool _isLoadingWardrobe = true;
-  bool _isLoadingAnalytics = true;
 
   // ============================================================
   // RECENT OUTFITS
@@ -206,22 +202,6 @@ class _HomePageState extends State<HomePage> {
         _isLoadingWardrobe = false;
 
         _totalPieces = items.length.toString();
-
-        if (items.isNotEmpty) {
-          final firstItem = Map<String, dynamic>.from(items.first);
-
-          final processedPath = firstItem['processed_image_path']?.toString();
-
-          final imagePath = firstItem['image_path']?.toString();
-
-          final selectedPath = processedPath != null && processedPath.isNotEmpty
-              ? processedPath
-              : imagePath;
-
-          if (selectedPath != null && selectedPath.isNotEmpty) {
-            _heroImageUrl = _buildImageUrl(selectedPath);
-          }
-        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -229,7 +209,6 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _isLoadingWardrobe = false;
         _totalPieces = '--';
-        _heroImageUrl = null;
       });
 
       debugPrint('Home wardrobe error: $e');
@@ -339,7 +318,6 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
 
       setState(() {
-        _isLoadingAnalytics = false;
         _isLoadingRecentOutfits = false;
 
         _itemsWorn = '$usedItems / $totalActiveItems';
@@ -352,7 +330,6 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
 
       setState(() {
-        _isLoadingAnalytics = false;
         _isLoadingRecentOutfits = false;
 
         _itemsWorn = '-- / --';
@@ -740,19 +717,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildHeroPlaceholder() {
-    return Container(
-      color: AppColors.surfaceContainerHigh,
-      child: const Center(
-        child: Icon(
-          Icons.checkroom_outlined,
-          size: 40,
-          color: AppColors.outline,
-        ),
       ),
     );
   }
