@@ -477,4 +477,198 @@ class ApiService {
       );
     }
   }
+
+  // ========================================================
+  // GET USER PROFILE
+  // ========================================================
+
+  static Future<Map<String, dynamic>> getProfile() async {
+    final response = await http.get(Uri.parse('$baseUrl/profile'));
+
+    if (response.statusCode != 200) {
+      throw Exception('Unable to load profile: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+
+    return data['profile'] as Map<String, dynamic>;
+  }
+
+  // ========================================================
+  // GET USER PREFERENCES
+  // ========================================================
+
+  static Future<Map<String, dynamic>> getUserPreferences() async {
+    final response = await http.get(Uri.parse('$baseUrl/user-preferences'));
+
+    if (response.statusCode != 200) {
+      throw Exception('Unable to load user preferences: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+
+    return data as Map<String, dynamic>;
+  }
+
+  // ========================================================
+  // UPDATE USER PREFERENCES
+  // ========================================================
+
+  static Future<bool> updateUserPreferences({
+    required String? gender,
+    required List<String> preferredStyles,
+    required List<String> preferredColors,
+    required List<String> preferredCategories,
+    required List<String> preferredOccasions,
+    required List<String> dislikedStyles,
+    required List<String> dislikedColors,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/user-preferences'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'gender': gender,
+        'preferred_styles': preferredStyles,
+        'preferred_colors': preferredColors,
+        'preferred_categories': preferredCategories,
+        'preferred_occasions': preferredOccasions,
+        'disliked_styles': dislikedStyles,
+        'disliked_colors': dislikedColors,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Unable to update user preferences: ${response.body}');
+    }
+
+    return true;
+  }
+
+  // ========================================================
+  // UPLOAD PROFILE IMAGE
+  // ========================================================
+
+  static Future<String> uploadProfileImage(String imagePath) async {
+    final uri = Uri.parse('$baseUrl/profile/image');
+
+    final request = http.MultipartRequest('POST', uri);
+
+    request.files.add(await http.MultipartFile.fromPath('file', imagePath));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    print('UPLOAD PROFILE STATUS: ${response.statusCode}');
+    print('UPLOAD PROFILE RESPONSE: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception('Unable to upload profile image: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+
+    return data['profile_image'] as String;
+  }
+
+  static Future<Map<String, dynamic>> getWearIndex() async {
+    final response = await http.get(Uri.parse('$baseUrl/wardrobe/wear-index'));
+
+    if (response.statusCode != 200) {
+      throw Exception(response.body);
+    }
+
+    return jsonDecode(response.body);
+  }
+
+  static Future<List<dynamic>> getColorPalette() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/wardrobe/color-palette'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(response.body);
+    }
+
+    final data = jsonDecode(response.body);
+
+    return data['colors'] ?? [];
+  }
+
+  static Future<Map<String, dynamic>> getStylePreferences() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/wardrobe/style-preferences'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(response.body);
+    }
+
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> getProfileInsights() async {
+    final response = await http.get(Uri.parse('$baseUrl/profile/insights'));
+
+    if (response.statusCode != 200) {
+      throw Exception(response.body);
+    }
+
+    return jsonDecode(response.body);
+  }
+
+  // ========================================================
+  // SAVE SEASONAL COLOR ANALYSIS
+  // ========================================================
+
+  static Future<bool> saveSeasonalColor({
+    required String undertone,
+    required String hairColor,
+    required String eyeColor,
+    required String contrastLevel,
+    required String season,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/seasonal-color'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'undertone': undertone,
+        'hair_color': hairColor,
+        'eye_color': eyeColor,
+        'contrast_level': contrastLevel,
+        'season': season,
+      }),
+    );
+
+    print('SAVE SEASONAL COLOR STATUS: ${response.statusCode}');
+    print('SAVE SEASONAL COLOR RESPONSE: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Unable to save seasonal color analysis: ${response.body}',
+      );
+    }
+
+    return true;
+  }
+
+  // ========================================================
+  // GET SEASONAL COLOR ANALYSIS
+  // ========================================================
+
+  static Future<Map<String, dynamic>?> getSeasonalColor() async {
+    final response = await http.get(Uri.parse('$baseUrl/seasonal-color'));
+
+    print('GET SEASONAL COLOR STATUS: ${response.statusCode}');
+    print('GET SEASONAL COLOR RESPONSE: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Unable to load seasonal color analysis: ${response.body}',
+      );
+    }
+
+    final data = jsonDecode(response.body);
+
+    return data['seasonal_color'] as Map<String, dynamic>?;
+  }
 }

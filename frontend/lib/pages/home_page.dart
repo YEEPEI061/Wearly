@@ -27,6 +27,10 @@ class _HomePageState extends State<HomePage> {
   String _temperature = '--°C';
   String _location = 'Loading...';
   IconData _weatherIcon = Icons.cloud_outlined;
+  String _weatherInsightTitle = 'Checking weather...';
+  String _weatherInsightDescription =
+      'Getting the latest weather information for your area.';
+  IconData _weatherInsightIcon = Icons.cloud_outlined;
 
   // ============================================================
   // WARDROBE
@@ -82,6 +86,8 @@ class _HomePageState extends State<HomePage> {
         '?latitude=$latitude'
         '&longitude=$longitude'
         '&current=temperature_2m,weather_code'
+        '&hourly=temperature_2m,precipitation_probability,weather_code'
+        '&forecast_days=1'
         '&timezone=auto',
       );
 
@@ -102,8 +108,9 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         _temperature = '${temperature.round()}°C';
-        _location = 'Petaling Jaya';
+        _location = 'Penang';
         _weatherIcon = _getWeatherIcon(weatherCode);
+        _updateWeatherInsight(data);
       });
     } catch (e) {
       if (!mounted) return;
@@ -112,6 +119,10 @@ class _HomePageState extends State<HomePage> {
         _temperature = '--°C';
         _location = 'Weather unavailable';
         _weatherIcon = Icons.cloud_off_outlined;
+        _weatherInsightTitle = 'Weather unavailable';
+        _weatherInsightDescription =
+            'Unable to retrieve the latest weather forecast. Please try again later.';
+        _weatherInsightIcon = Icons.cloud_off_outlined;
       });
 
       debugPrint('Weather error: $e');
@@ -156,6 +167,87 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Icons.cloud_outlined;
+  }
+
+  void _updateWeatherInsight(Map<String, dynamic> data) {
+    final current = data['current'];
+    final hourly = data['hourly'];
+
+    final temperature = (current['temperature_2m'] as num).toDouble();
+    final weatherCode = current['weather_code'] as int;
+
+    final times = List<String>.from(hourly['time']);
+    final probabilities = List<dynamic>.from(
+      hourly['precipitation_probability'],
+    );
+    final codes = List<dynamic>.from(hourly['weather_code']);
+
+    final now = DateTime.now();
+
+    int startIndex = times.indexWhere((time) {
+      final forecastTime = DateTime.tryParse(time);
+      return forecastTime != null && !forecastTime.isBefore(now);
+    });
+
+    if (startIndex == -1) {
+      startIndex = 0;
+    }
+
+    final endIndex = (startIndex + 6).clamp(0, times.length);
+
+    int? rainIndex;
+
+    for (int i = startIndex; i < endIndex; i++) {
+      final probability = (probabilities[i] as num?)?.toInt() ?? 0;
+      final code = (codes[i] as num?)?.toInt() ?? 0;
+
+      final isRain =
+          (code >= 51 && code <= 67) ||
+          (code >= 80 && code <= 82) ||
+          (code >= 95 && code <= 99);
+
+      if (probability >= 50 || isRain) {
+        rainIndex = i;
+        break;
+      }
+    }
+
+    if (rainIndex != null) {
+      final rainTime = DateTime.parse(times[rainIndex]);
+
+      _weatherInsightTitle =
+          'Rain possible around ${DateFormat('h a').format(rainTime)}';
+
+      _weatherInsightDescription =
+          'Rain is forecast in your area. Consider carrying an umbrella '
+          'and choosing weather-friendly clothing.';
+
+      _weatherInsightIcon = Icons.umbrella_outlined;
+    } else if (temperature >= 30) {
+      _weatherInsightTitle = 'Warm weather ahead';
+
+      _weatherInsightDescription =
+          'Temperatures are around ${temperature.round()}°C. '
+          'Consider lightweight, breathable clothing for the day.';
+
+      _weatherInsightIcon = Icons.wb_sunny_outlined;
+    } else if (weatherCode == 0 || weatherCode == 1) {
+      _weatherInsightTitle = 'A good day to dress light';
+
+      _weatherInsightDescription =
+          'The weather is generally clear. Enjoy the day with '
+          'comfortable, lightweight outfits.';
+
+      _weatherInsightIcon = Icons.wb_sunny_outlined;
+    } else {
+      _weatherInsightTitle = 'Cloudy weather today';
+
+      _weatherInsightDescription =
+          'Cloudier conditions are expected. Consider a comfortable '
+          'outfit with a light outer layer.';
+
+      _weatherInsightIcon = Icons.cloud_outlined;
+    }
   }
 
   // ============================================================
@@ -879,8 +971,8 @@ class _HomePageState extends State<HomePage> {
               color: AppColors.secondaryDim,
               borderRadius: BorderRadius.circular(AppRadius.medium),
             ),
-            child: const Icon(
-              Icons.umbrella_outlined,
+            child: Icon(
+              _weatherInsightIcon,
               size: 24,
               color: AppColors.primary,
             ),
@@ -893,7 +985,7 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Rain expected by 4 PM',
+                  _weatherInsightTitle,
                   style: AppTextStyles.headlineSmall.copyWith(
                     color: AppColors.primary,
                   ),
@@ -902,10 +994,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 2),
 
                 Text(
-                  "We recommend checking "
-                  "your wardrobe for "
-                  "weather-friendly pieces "
-                  "before heading out.",
+                  _weatherInsightDescription,
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.onSurfaceVariant,
                   ),

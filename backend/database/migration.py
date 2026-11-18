@@ -596,6 +596,45 @@ def create_tables():
 
 
         # ====================================================
+        # 12. USER SEASONAL COLORS
+        # ====================================================
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_seasonal_colors (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+                user_id BIGINT UNSIGNED NOT NULL UNIQUE,
+
+                undertone VARCHAR(30),
+
+                hair_color VARCHAR(50),
+
+                eye_color VARCHAR(50),
+
+                contrast_level VARCHAR(30),
+
+                season VARCHAR(30) NOT NULL,
+
+                created_at DATETIME NOT NULL
+                    DEFAULT CURRENT_TIMESTAMP,
+
+                updated_at DATETIME NOT NULL
+                    DEFAULT CURRENT_TIMESTAMP
+                    ON UPDATE CURRENT_TIMESTAMP,
+
+                CONSTRAINT fk_seasonal_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+
+        print("✓ user_seasonal_colors")
+
+
+        # ====================================================
         # COMMIT
         # ====================================================
 
@@ -757,6 +796,7 @@ def verify_database():
             "virtual_try_on",
             "travel_plans",
             "travel_outfits",
+            "user_seasonal_colors",
         ]
 
         print()
@@ -874,6 +914,7 @@ def main():
     print("  9. virtual_try_on")
     print(" 10. travel_plans")
     print(" 11. travel_outfits")
+    print("  12. user_seasonal_colors")
     print()
 
 

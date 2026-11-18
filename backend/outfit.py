@@ -922,6 +922,231 @@ def create_outfit_preview(
         f"/outfit-previews/{filename}"
     )
 
+def create_vto_garment_reference(
+    outfit_id: str,
+    items: List[Dict],
+) -> Optional[str]:
+
+    if not items:
+        return None
+
+    full_item = next(
+        (
+            item
+            for item in items
+            if category_group(
+                item.get("category", "")
+            ) == "full"
+        ),
+        None,
+    )
+
+    upper_item = next(
+        (
+            item
+            for item in items
+            if category_group(
+                item.get("category", "")
+            ) == "upper"
+        ),
+        None,
+    )
+
+    lower_item = next(
+        (
+            item
+            for item in items
+            if category_group(
+                item.get("category", "")
+            ) == "lower"
+        ),
+        None,
+    )
+
+    # --------------------------------------------------
+    # FULL-BODY ITEM
+    # --------------------------------------------------
+
+    if full_item is not None:
+
+        clothing = _load_processed_clothing(
+            full_item
+        )
+
+        if clothing is None:
+            return None
+
+        canvas = Image.new(
+            "RGBA",
+            (
+                700,
+                900,
+            ),
+            (
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+
+        clothing.thumbnail(
+            (
+                560,
+                760,
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+        x = (
+            canvas.width
+            - clothing.width
+        ) // 2
+
+        y = (
+            canvas.height
+            - clothing.height
+        ) // 2
+
+        canvas.alpha_composite(
+            clothing,
+            (
+                x,
+                y,
+            ),
+        )
+
+    # --------------------------------------------------
+    # UPPER + LOWER
+    # --------------------------------------------------
+
+    elif (
+        upper_item is not None
+        and lower_item is not None
+    ):
+
+        upper_image = _load_processed_clothing(
+            upper_item
+        )
+
+        lower_image = _load_processed_clothing(
+            lower_item
+        )
+
+        if (
+            upper_image is None
+            or lower_image is None
+        ):
+            return None
+
+        # ------------------------------------------------
+        # Same garment proportions as outfit preview
+        # ------------------------------------------------
+
+        canvas = Image.new(
+            "RGBA",
+            (
+                800,
+                800,
+            ),
+            (
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+
+        # -------------------------
+        # UPPER
+        # -------------------------
+
+        upper_image.thumbnail(
+            (
+                360,
+                230,
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+        upper_x = (
+            canvas.width
+            - upper_image.width
+        ) // 2
+
+        upper_y = 25
+
+        canvas.alpha_composite(
+            upper_image,
+            (
+                upper_x,
+                upper_y,
+            ),
+        )
+
+        # -------------------------
+        # LOWER
+        # -------------------------
+
+        lower_image.thumbnail(
+            (
+                560,
+                500,
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+        lower_x = (
+            canvas.width
+            - lower_image.width
+        ) // 2
+
+        lower_y = 270
+
+        canvas.alpha_composite(
+            lower_image,
+            (
+                lower_x,
+                lower_y,
+            ),
+        )
+
+    else:
+
+        print(
+            "⚠ Cannot create VTO garment reference: "
+            "required clothing items missing."
+        )
+
+        return None
+
+    # --------------------------------------------------
+    # Save
+    # --------------------------------------------------
+
+    filename = (
+        f"{outfit_id}_vto.png"
+    )
+
+    output_path = os.path.join(
+        OUTFIT_PREVIEW_DIR,
+        filename,
+    )
+
+    canvas.save(
+        output_path,
+        "PNG",
+    )
+
+    print(
+        f"✓ VTO garment reference created: "
+        f"{output_path}"
+    )
+
+    return (
+        f"/outfit-previews/{filename}"
+    )
+
 def cleanup_old_outfit_previews(
     keep_latest: int = 20,
 ):

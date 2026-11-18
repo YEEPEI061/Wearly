@@ -1,6 +1,7 @@
 import os
 import math
 import uuid
+import json
 
 from fastapi import (
     FastAPI,
@@ -9,13 +10,12 @@ from fastapi import (
     HTTPException,
     Form
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
 from database.db import get_connection
 from typing import List, Optional
-from datetime import date
 
 from database.clothing import (
     create_clothing_item,
@@ -31,9 +31,7 @@ from wardrobe import (
     PROCESSED_DIR,
     UPLOAD_DIR,
     process_clothing,
-    get_wardrobe,
     get_clothing_item,
-    delete_clothing,
     reset_generated_outfits,
     detect_category,
 )
@@ -41,12 +39,28 @@ from wardrobe import (
 from outfit import (
     generate_outfits,
     generate_another_outfit,
-    submit_feedback,
     create_outfit_preview,
     OUTFIT_PREVIEW_DIR,
+    create_vto_garment_reference,
 )
 from fastapi.staticfiles import StaticFiles
 
+class UserPreferencesRequest(BaseModel):
+    gender: str | None = None
+
+    preferred_styles: list[str] = Field(default_factory=list)
+    preferred_colors: list[str] = Field(default_factory=list)
+    preferred_categories: list[str] = Field(default_factory=list)
+    preferred_occasions: list[str] = Field(default_factory=list)
+    disliked_styles: list[str] = Field(default_factory=list)
+    disliked_colors: list[str] = Field(default_factory=list)
+
+class SeasonalColorRequest(BaseModel):
+    undertone: str
+    hair_color: str
+    eye_color: str
+    contrast_level: str
+    season: str
 
 # -------------------------------------------------------------------
 # FastAPI
@@ -55,6 +69,24 @@ from fastapi.staticfiles import StaticFiles
 app = FastAPI(
     title="Wearly AI Wardrobe API",
     version="1.0.0",
+)
+
+# ========================================================
+# PROFILE IMAGE STORAGE
+# ========================================================
+
+PROFILE_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "uploads",
+    "profile"
+)
+
+os.makedirs(PROFILE_UPLOAD_DIR, exist_ok=True)
+
+app.mount(
+    "/uploads/profile",
+    StaticFiles(directory=PROFILE_UPLOAD_DIR),
+    name="profile_images"
 )
 
 app.mount(
@@ -165,6 +197,247 @@ async def get_wardrobe():
             status_code=500,
             detail=str(e),
         )
+
+@app.get("/wardrobe/wear-index")
+def get_wear_index():
+
+    user_id = 1  # TEMPORARY DEMO USER
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                COUNT(DISTINCT ci.id) AS total_items,
+                COUNT(DISTINCT CASE
+                    WHEN oh.id IS NOT NULL THEN ci.id
+                END) AS worn_items
+            FROM clothing_items ci
+            LEFT JOIN outfit_items oi
+                ON ci.id = oi.clothing_id
+            LEFT JOIN outfit_history oh
+                ON oi.outfit_id = oh.outfit_id
+                AND oh.user_id = ci.user_id
+            WHERE ci.user_id = %s
+            AND ci.is_active = TRUE;
+            """,
+            (user_id,)
+        )
+
+        result = cursor.fetchone()
+
+        print("WEAR INDEX USER ID:", user_id)
+        print("WEAR INDEX SQL RESULT:", result)
+
+        total_items = result["total_items"]
+        worn_items = result["worn_items"]
+
+        wear_index = (
+            round((worn_items / total_items) * 100)
+            if total_items > 0
+            else 0
+        )
+
+        return {
+            "total_items": total_items,
+            "worn_items": worn_items,
+            "wear_index": wear_index
+        }
+
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
+
+@app.get("/wardrobe/color-palette")
+def get_wardrobe_color_palette():
+
+    user_id = 1  # TEMPORARY DEMO USER
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                LOWER(TRIM(color)) AS color,
+                COUNT(*) AS item_count
+            FROM clothing_items
+            WHERE user_id = %s
+                AND is_active = TRUE
+                AND color IS NOT NULL
+                AND TRIM(color) != ''
+            GROUP BY LOWER(TRIM(color))
+            ORDER BY item_count DESC
+            LIMIT 5;
+            """,
+            (user_id,)
+        )
+
+        results = cursor.fetchall()
+
+        color_map = {
+            "black": "#222222",
+            "white": "#F5F5F5",
+            "light gray": "#D3D3D3",
+            "dark gray": "#555555",
+            "gray": "#808080",
+            "beige": "#D8C3A5",
+            "brown": "#795548",
+            "navy blue": "#1E3A5F",
+            "blue": "#2196F3",
+            "green": "#4F7942",
+            "red": "#C62828",
+            "orange": "#E68A35",
+            "yellow": "#E5C453",
+            "pink": "#E8A0B5",
+            "purple": "#8064A2",
+            "multicolor": "#A78BBA",
+        }
+
+        colors = []
+
+        for item in results:
+            color_name = item["color"]
+
+            colors.append({
+                "name": color_name.title(),
+                "color": color_map.get(color_name, "#A0A0A0"),
+                "count": item["item_count"],
+            })
+
+        return {
+            "success": True,
+            "colors": colors,
+        }
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
+
+@app.get("/wardrobe/style-preferences")
+def get_style_preferences():
+
+    user_id = 1  # TEMPORARY DEMO USER
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                LOWER(TRIM(COALESCE(
+                    NULLIF(TRIM(ci.style), ''),
+                    NULLIF(TRIM(ai.detected_style), '')
+                ))) AS style,
+                COUNT(DISTINCT ci.id) AS item_count
+            FROM clothing_items ci
+            LEFT JOIN clothing_ai_analysis ai
+                ON ci.id = ai.clothing_id
+            WHERE ci.user_id = %s
+                AND ci.is_active = TRUE
+                AND COALESCE(
+                    NULLIF(TRIM(ci.style), ''),
+                    NULLIF(TRIM(ai.detected_style), '')
+                ) IS NOT NULL
+            GROUP BY
+                LOWER(TRIM(COALESCE(
+                    NULLIF(TRIM(ci.style), ''),
+                    NULLIF(TRIM(ai.detected_style), '')
+                )));
+            """,
+            (user_id,)
+        )
+
+        results = cursor.fetchall()
+
+        groups = {
+            "Relaxed Tailoring": [
+                "casual",
+                "relaxed",
+                "smart casual",
+            ],
+            "Oversized Outerwear": [
+                "streetwear",
+                "sporty",
+                "vintage",
+            ],
+            "Structured Minimal": [
+                "formal",
+                "minimalist",
+                "elegant",
+                "preppy",
+            ],
+        }
+
+        counts = {
+            group: 0
+            for group in groups
+        }
+
+        for item in results:
+            style = item["style"]
+
+            for group, styles in groups.items():
+                if style in styles:
+                    counts[group] += item["item_count"]
+                    break
+
+        total = sum(counts.values())
+
+        preferences = []
+
+        for group, count in counts.items():
+            percentage = (
+                round((count / total) * 100)
+                if total > 0
+                else 0
+            )
+
+            preferences.append({
+                "title": group,
+                "count": count,
+                "percentage": percentage,
+            })
+
+        preferences.sort(
+            key=lambda item: item["count"],
+            reverse=True,
+        )
+
+        return {
+            "success": True,
+            "total_items": total,
+            "preferences": preferences,
+        }
+
+    except Exception as e:
+        import traceback
+
+        print("STYLE PREFERENCES ERROR:")
+        traceback.print_exc()
+
+        raise
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
 
 
 @app.get("/wardrobe/{item_id}")
@@ -1716,7 +1989,776 @@ def delete_outfit_history(
 
         if connection is not None:
             connection.close()
-            
+
+
+# ============================================================
+# TEMPORARY VTO GARMENT REFERENCE
+# ============================================================
+
+@app.post("/vto-garment-reference")
+def vto_garment_reference(data: dict):
+
+    try:
+
+        item_ids = data.get("item_ids", [])
+
+        if not item_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No clothing items selected.",
+            )
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        placeholders = ", ".join(
+            ["%s"] * len(item_ids)
+        )
+
+        query = f"""
+            SELECT
+                id,
+                user_id,
+                name,
+                category,
+                subcategory,
+                brand,
+                color,
+                style,
+                material,
+                image_path,
+                processed_image_path,
+                is_favorite,
+                is_active,
+                created_at,
+                updated_at
+            FROM clothing_items
+            WHERE id IN ({placeholders})
+              AND is_active = TRUE
+        """
+
+        cursor.execute(
+            query,
+            tuple(item_ids),
+        )
+
+        selected_items = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        if not selected_items:
+            raise HTTPException(
+                status_code=404,
+                detail="Selected clothing items were not found.",
+            )
+
+        # --------------------------------------------------------
+        # Make sure every requested item was found
+        # --------------------------------------------------------
+
+        selected_ids = {
+            str(item["id"])
+            for item in selected_items
+        }
+
+        missing_ids = [
+            str(item_id)
+            for item_id in item_ids
+            if str(item_id) not in selected_ids
+        ]
+
+        if missing_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Clothing items not found: {missing_ids}",
+            )
+
+        # --------------------------------------------------------
+        # Generate temporary VTO garment reference
+        # --------------------------------------------------------
+
+        reference_id = f"vto_{uuid.uuid4().hex}"
+
+        image_url = create_vto_garment_reference(
+            reference_id,
+            selected_items,
+        )
+
+        if image_url is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Unable to create VTO garment reference."
+                ),
+            )
+
+        print(
+            f"✓ VTO garment reference created: "
+            f"{image_url}"
+        )
+
+        return {
+            "success": True,
+            "image_url": image_url,
+            "items": selected_items,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        print(
+            "❌ VTO GARMENT REFERENCE ERROR:",
+            e,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+# ========================================================
+# GET USER PREFERENCES
+# ========================================================
+
+@app.get("/user-preferences")
+def get_user_preferences():
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        # Get user's gender
+        cursor.execute(
+            """
+            SELECT gender
+            FROM users
+            WHERE id = %s
+            """,
+            (DEMO_USER_ID,)
+        )
+
+        user = cursor.fetchone()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found."
+            )
+
+        # Get saved preferences
+        cursor.execute(
+            """
+            SELECT
+                preferred_styles,
+                preferred_colors,
+                preferred_categories,
+                preferred_occasions,
+                disliked_styles,
+                disliked_colors
+            FROM user_preferences
+            WHERE user_id = %s
+            """,
+            (DEMO_USER_ID,)
+        )
+
+        preferences = cursor.fetchone()
+
+        # Default preferences for a new user
+        if preferences is None:
+            preferences = {
+                "preferred_styles": [],
+                "preferred_colors": [],
+                "preferred_categories": [],
+                "preferred_occasions": [],
+                "disliked_styles": [],
+                "disliked_colors": [],
+            }
+
+        else:
+            # Convert JSON values into Python lists
+            for key, value in preferences.items():
+
+                if value is None:
+                    preferences[key] = []
+
+                elif isinstance(value, str):
+                    preferences[key] = json.loads(value)
+
+        return {
+            "success": True,
+            "gender": user["gender"],
+            "preferences": preferences
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        print("GET USER PREFERENCES ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve user preferences."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
+
+# ========================================================
+# UPDATE USER PREFERENCES
+# ========================================================
+
+@app.put("/user-preferences")
+def update_user_preferences(
+    request: UserPreferencesRequest
+):
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        # Check whether the user exists
+        cursor.execute(
+            """
+            SELECT id
+            FROM users
+            WHERE id = %s
+            """,
+            (DEMO_USER_ID,)
+        )
+
+        user = cursor.fetchone()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found."
+            )
+
+        # Update gender
+        cursor.execute(
+            """
+            UPDATE users
+            SET gender = %s
+            WHERE id = %s
+            """,
+            (request.gender, DEMO_USER_ID)
+        )
+
+        # Convert preference lists into JSON strings
+        preferred_styles = json.dumps(request.preferred_styles)
+        preferred_colors = json.dumps(request.preferred_colors)
+        preferred_categories = json.dumps(request.preferred_categories)
+        preferred_occasions = json.dumps(request.preferred_occasions)
+        disliked_styles = json.dumps(request.disliked_styles)
+        disliked_colors = json.dumps(request.disliked_colors)
+
+        # Insert or update preferences
+        cursor.execute(
+            """
+            INSERT INTO user_preferences (
+                user_id,
+                preferred_styles,
+                preferred_colors,
+                preferred_categories,
+                preferred_occasions,
+                disliked_styles,
+                disliked_colors
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+
+            ON DUPLICATE KEY UPDATE
+                preferred_styles = VALUES(preferred_styles),
+                preferred_colors = VALUES(preferred_colors),
+                preferred_categories = VALUES(preferred_categories),
+                preferred_occasions = VALUES(preferred_occasions),
+                disliked_styles = VALUES(disliked_styles),
+                disliked_colors = VALUES(disliked_colors)
+            """,
+            (
+                DEMO_USER_ID,
+                preferred_styles,
+                preferred_colors,
+                preferred_categories,
+                preferred_occasions,
+                disliked_styles,
+                disliked_colors
+            )
+        )
+
+        connection.commit()
+
+        return {
+            "success": True,
+            "message": "User preferences updated successfully."
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        connection.rollback()
+
+        print("UPDATE USER PREFERENCES ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to update user preferences."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
+
+
+# ========================================================
+# SAVE SEASONAL COLOR ANALYSIS
+# ========================================================
+
+@app.post("/seasonal-color")
+def save_seasonal_color(request: SeasonalColorRequest):
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        # Check whether the user exists
+        cursor.execute(
+            """
+            SELECT id
+            FROM users
+            WHERE id = %s
+            """,
+            (DEMO_USER_ID,)
+        )
+
+        user = cursor.fetchone()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found."
+            )
+
+        # Insert or update seasonal color analysis
+        cursor.execute(
+            """
+            INSERT INTO user_seasonal_colors (
+                user_id,
+                undertone,
+                hair_color,
+                eye_color,
+                contrast_level,
+                season
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+
+            ON DUPLICATE KEY UPDATE
+                undertone = VALUES(undertone),
+                hair_color = VALUES(hair_color),
+                eye_color = VALUES(eye_color),
+                contrast_level = VALUES(contrast_level),
+                season = VALUES(season)
+            """,
+            (
+                DEMO_USER_ID,
+                request.undertone,
+                request.hair_color,
+                request.eye_color,
+                request.contrast_level,
+                request.season
+            )
+        )
+
+        connection.commit()
+
+        return {
+            "success": True,
+            "message": "Seasonal color analysis saved successfully."
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        connection.rollback()
+
+        print("SAVE SEASONAL COLOR ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to save seasonal color analysis."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
+
+# ========================================================
+# GET SEASONAL COLOR ANALYSIS
+# ========================================================
+
+@app.get("/seasonal-color")
+def get_seasonal_color():
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                undertone,
+                hair_color,
+                eye_color,
+                contrast_level,
+                season,
+                created_at,
+                updated_at
+            FROM user_seasonal_colors
+            WHERE user_id = %s
+            """,
+            (DEMO_USER_ID,)
+        )
+
+        result = cursor.fetchone()
+
+        return {
+            "success": True,
+            "seasonal_color": result
+        }
+
+    except Exception as e:
+        print("GET SEASONAL COLOR ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve seasonal color analysis."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
+        
+# ========================================================
+# TEMPORARY DEMO USER
+# ========================================================
+
+DEMO_USER_ID = 1
+
+# ========================================================
+# GET USER PROFILE
+# ========================================================
+
+@app.get("/profile")
+def get_profile():
+
+    connection = get_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                name,
+                email,
+                gender,
+                profile_image,
+                created_at,
+                updated_at
+            FROM users
+            WHERE id = %s
+            """,
+            (DEMO_USER_ID,)
+        )
+
+        user = cursor.fetchone()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User profile not found."
+            )
+
+        return {
+            "success": True,
+            "profile": user
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        print("❌ GET PROFILE ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve user profile."
+        )
+
+    finally:
+        cursor.close()
+        connection.close()
+
+
+# ========================================================
+# UPLOAD PROFILE IMAGE
+# ========================================================
+
+@app.post("/profile/image")
+async def upload_profile_image(file: UploadFile = File(...)):
+    print("PROFILE IMAGE FILENAME:", file.filename)
+    print("PROFILE IMAGE CONTENT TYPE:", file.content_type)
+
+    allowed_extensions = {
+        ".jpg": ".jpg",
+        ".jpeg": ".jpg",
+        ".png": ".png",
+        ".webp": ".webp",
+    }
+
+    file_extension = os.path.splitext(file.filename or "")[1].lower()
+
+    if file_extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPG, PNG and WEBP images are allowed."
+        )
+
+    extension = allowed_extensions[file_extension]
+
+    image_data = await file.read()
+
+    if not image_data:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded image is empty."
+        )
+
+    if len(image_data) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="Image size must not exceed 5 MB."
+        )
+
+    connection = None
+    cursor = None
+    image_path = None
+
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        # Check whether the demo user exists
+        cursor.execute(
+            "SELECT id FROM users WHERE id = %s",
+            (DEMO_USER_ID,)
+        )
+
+        user = cursor.fetchone()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User profile not found."
+            )
+
+        # Generate a unique filename
+        filename = f"{uuid.uuid4().hex}{extension}"
+
+        image_path = os.path.join(
+            PROFILE_UPLOAD_DIR,
+            filename
+        )
+
+        # Save image to backend
+        with open(image_path, "wb") as image_file:
+            image_file.write(image_data)
+
+        # Save image URL path to MySQL
+        database_image_path = f"/uploads/profile/{filename}"
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET profile_image = %s
+            WHERE id = %s
+            """,
+            (database_image_path, DEMO_USER_ID)
+        )
+
+        connection.commit()
+
+        return {
+            "success": True,
+            "message": "Profile image uploaded successfully.",
+            "profile_image": database_image_path
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        if connection:
+            connection.rollback()
+
+        # Remove uploaded file if database update fails
+        if image_path and os.path.exists(image_path):
+            os.remove(image_path)
+
+        print("UPLOAD PROFILE IMAGE ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to upload profile image."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+        await file.close()
+
+
+@app.get("/profile/insights")
+def get_profile_insights():
+
+    user_id = 1  # TEMPORARY DEMO USER
+
+    connection = get_connection()
+    cursor = None
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        # Get active wardrobe category counts
+        cursor.execute(
+            """
+            SELECT
+                LOWER(TRIM(category)) AS category,
+                COUNT(*) AS item_count
+            FROM clothing_items
+            WHERE user_id = %s
+                AND is_active = TRUE
+            GROUP BY LOWER(TRIM(category));
+            """,
+            (user_id,)
+        )
+
+        results = cursor.fetchall()
+
+        category_counts = {
+            "upper": 0,
+            "lower": 0,
+            "full": 0,
+        }
+
+        for item in results:
+            category = item["category"]
+
+            if category in ["upper", "top"]:
+                category_counts["upper"] += item["item_count"]
+
+            elif category in ["lower", "bottom"]:
+                category_counts["lower"] += item["item_count"]
+
+            elif category in ["full", "dress", "jumpsuit"]:
+                category_counts["full"] += item["item_count"]
+
+        upper_count = category_counts["upper"]
+        lower_count = category_counts["lower"]
+        full_count = category_counts["full"]
+
+        outfit_potential = (
+            upper_count * lower_count
+        ) + full_count
+
+        total_items = upper_count + lower_count + full_count
+
+        # Count unique clothing items that have never been worn
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS unworn_items
+            FROM clothing_items ci
+            WHERE ci.user_id = %s
+                AND ci.is_active = TRUE
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM outfit_items oi
+                    JOIN outfit_history oh
+                        ON oi.outfit_id = oh.outfit_id
+                    WHERE oi.clothing_id = ci.id
+                        AND oh.user_id = ci.user_id
+                );
+            """,
+            (user_id,)
+        )
+
+        usage_result = cursor.fetchone()
+
+        unworn_items = usage_result["unworn_items"]
+
+        # Generate insight
+        title = "Your Outfit Potential"
+
+        description = (
+            f"Your {total_items} wardrobe pieces can create "
+            f"up to {outfit_potential} basic outfit combinations "
+            f"using your current upper and lower items."
+        )
+
+        if unworn_items > 0:
+            description += (
+                f" You also have {unworn_items} "
+                f"items waiting to be worn."
+            )
+
+        return {
+            "success": True,
+            "title": title,
+            "description": description,
+            "total_items": total_items,
+            "upper_count": upper_count,
+            "lower_count": lower_count,
+            "full_count": full_count,
+            "outfit_potential": outfit_potential,
+            "unworn_items": unworn_items,
+        }
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        connection.close()
+
+
 # -------------------------------------------------------------------
 # Run directly
 # -------------------------------------------------------------------

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:frontend/theme/app_colors.dart';
 import 'package:frontend/theme/app_text_styles.dart';
 import 'package:frontend/theme/app_radius.dart';
+import 'package:frontend/services/api_service.dart';
 
 class OnboardingPage extends StatefulWidget {
-  const OnboardingPage({super.key});
+  final bool isEditing;
+
+  const OnboardingPage({super.key, this.isEditing = false});
 
   @override
   State<OnboardingPage> createState() => _OnboardingPageState();
@@ -15,11 +18,17 @@ class _OnboardingPageState extends State<OnboardingPage> {
   // SELECTIONS
   // ============================================================
 
-  String? _selectedGender = 'Women / Girl';
+  String? _selectedGender;
 
-  String? _selectedStyle = 'Minimalist Tailoring';
+  final Set<String> _selectedStyles = {};
+  final Set<String> _selectedColors = {};
+  final Set<String> _selectedCategories = {};
+  final Set<String> _selectedOccasions = {};
+  final Set<String> _dislikedStyles = {};
+  final Set<String> _dislikedColors = {};
 
-  final Set<String> _selectedColors = {'Navy'};
+  bool _isLoadingPreferences = false;
+  bool _isSavingPreferences = false;
 
   // ============================================================
   // DATA
@@ -32,21 +41,53 @@ class _OnboardingPageState extends State<OnboardingPage> {
   ];
 
   final List<String> _styles = [
-    'Minimalist Tailoring',
-    'Parisian Chic',
-    'Avant-Garde',
-    'Effortless Luxury',
-    'Casual Summer',
+    'Casual',
+    'Smart Casual',
+    'Formal',
+    'Sporty',
+    'Streetwear',
+    'Minimalist',
+    'Elegant',
+    'Vintage',
+    'Preppy',
+    'Relaxed',
   ];
 
   final List<Map<String, dynamic>> _colors = [
-    {'name': 'Navy', 'color': Color(0xFF26364A)},
-    {'name': 'Sage', 'color': Color(0xFF8E9E82)},
-    {'name': 'Ecru', 'color': Color(0xFFEFECE6)},
-    {'name': 'Terracotta', 'color': Color(0xFFC67D5A)},
-    {'name': 'Muted Blue', 'color': Color(0xFFAABFD0)},
-    {'name': 'Charcoal', 'color': Color(0xFF30343B)},
+    {'name': 'Black', 'color': Color(0xFF222222)},
+    {'name': 'White', 'color': Color(0xFFF5F5F5)},
+    {'name': 'Beige', 'color': Color(0xFFD8C3A5)},
+    {'name': 'Brown', 'color': Color(0xFF795548)},
+    {'name': 'Navy Blue', 'color': Color(0xFF1E3A5F)},
+    {'name': 'Blue', 'color': Color(0xFF2196F3)},
+    {'name': 'Green', 'color': Color(0xFF4F7942)},
+    {'name': 'Red', 'color': Color(0xFFC62828)},
+    {'name': 'Pink', 'color': Color(0xFFE8A0B5)},
+    {'name': 'Purple', 'color': Color(0xFF8064A2)},
+    {'name': 'Orange', 'color': Color(0xFFE68A35)},
+    {'name': 'Yellow', 'color': Color(0xFFE5C453)},
+    {'name': 'Grey', 'color': Color(0xFF808080)},
   ];
+
+  final List<String> _categories = ['Upper', 'Lower', 'Full Body'];
+
+  final List<String> _occasions = [
+    'Casual / Daily',
+    'Work / Study',
+    'Formal Events',
+    'Going Out',
+    'Sports / Activities',
+    'Special Occasions',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.isEditing) {
+      _loadPreferences();
+    }
+  }
 
   // ============================================================
   // ACTIONS
@@ -58,32 +99,220 @@ class _OnboardingPageState extends State<OnboardingPage> {
     });
   }
 
-  void _selectStyle(String style) {
+  void _toggleSelection(Set<String> selections, String value) {
     setState(() {
-      _selectedStyle = style;
-    });
-  }
-
-  void _toggleColor(String color) {
-    setState(() {
-      if (_selectedColors.contains(color)) {
-        _selectedColors.remove(color);
+      if (selections.contains(value)) {
+        selections.remove(value);
       } else {
-        _selectedColors.add(color);
+        selections.add(value);
       }
     });
   }
 
-  void _continue() {
-    // Backend personalization will be connected later.
+  Future<void> _continue() async {
+    if (_isSavingPreferences || _isLoadingPreferences) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Your style preferences have been saved.')),
-    );
+    // Prevent selecting the same style as both preferred and disliked.
+    final overlappingStyles = _selectedStyles.intersection(_dislikedStyles);
+
+    if (overlappingStyles.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please remove styles selected in both preferred and disliked.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Prevent selecting the same colour as both preferred and disliked.
+    final overlappingColors = _selectedColors.intersection(_dislikedColors);
+
+    if (overlappingColors.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please remove colours selected in both preferred and disliked.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingPreferences = true;
+    });
+
+    try {
+      await ApiService.updateUserPreferences(
+        gender: _selectedGender,
+        preferredStyles: _selectedStyles.toList(),
+        preferredColors: _selectedColors.toList(),
+        preferredCategories: _selectedCategories.toList(),
+        preferredOccasions: _selectedOccasions.toList(),
+        dislikedStyles: _dislikedStyles.toList(),
+        dislikedColors: _dislikedColors.toList(),
+      );
+
+      if (!mounted) return;
+
+      if (widget.isEditing) {
+        Navigator.pop(context);
+
+        _showMessage('Your preferences have been updated.');
+      } else {
+        _showMessage('Your preferences have been saved.');
+      }
+    } catch (e) {
+      debugPrint('SAVE USER PREFERENCES ERROR: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to save your preferences. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingPreferences = false;
+        });
+      }
+    }
   }
 
-  void _skipIntro() {
-    // connect to the next page later
+  Future<void> _loadPreferences() async {
+    setState(() {
+      _isLoadingPreferences = true;
+    });
+
+    try {
+      final data = await ApiService.getUserPreferences();
+
+      if (!mounted) return;
+
+      final preferences = data['preferences'] as Map<String, dynamic>;
+
+      setState(() {
+        _selectedGender = data['gender'] as String?;
+
+        _selectedStyles
+          ..clear()
+          ..addAll(List<String>.from(preferences['preferred_styles'] ?? []));
+
+        _selectedColors
+          ..clear()
+          ..addAll(List<String>.from(preferences['preferred_colors'] ?? []));
+
+        _selectedCategories
+          ..clear()
+          ..addAll(
+            List<String>.from(preferences['preferred_categories'] ?? []),
+          );
+
+        _selectedOccasions
+          ..clear()
+          ..addAll(List<String>.from(preferences['preferred_occasions'] ?? []));
+
+        _dislikedStyles
+          ..clear()
+          ..addAll(List<String>.from(preferences['disliked_styles'] ?? []));
+
+        _dislikedColors
+          ..clear()
+          ..addAll(List<String>.from(preferences['disliked_colors'] ?? []));
+      });
+    } catch (e) {
+      debugPrint('LOAD USER PREFERENCES ERROR: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load your preferences.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingPreferences = false;
+        });
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    final overlay = Overlay.of(context);
+
+    final overlayEntry = OverlayEntry(
+      builder: (overlayContext) {
+        return Positioned(
+          top: MediaQuery.of(overlayContext).padding.top + 16,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.10),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE8F5E9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    Flexible(
+                      child: Text(
+                        message,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(overlayEntry);
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (overlayEntry.mounted) {
+        overlayEntry.remove();
+      }
+    });
   }
 
   // ============================================================
@@ -118,10 +347,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
   // ============================================================
 
   Widget _buildStylePill(String style) {
-    final bool isSelected = _selectedStyle == style;
+    final bool isSelected = _selectedStyles.contains(style);
 
     return GestureDetector(
-      onTap: () => _selectStyle(style),
+      onTap: () => _toggleSelection(_selectedStyles, style),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
@@ -129,13 +358,22 @@ class _OnboardingPageState extends State<OnboardingPage> {
           color: isSelected ? AppColors.primary : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppRadius.small),
         ),
-        child: Text(
-          style,
-          textAlign: TextAlign.center,
-          style: AppTextStyles.labelMedium.copyWith(
-            color: isSelected ? AppColors.white : AppColors.primary,
-            letterSpacing: 0.8,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              style,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.labelMedium.copyWith(
+                color: isSelected ? AppColors.white : AppColors.primary,
+                letterSpacing: 0.8,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.check, size: 14, color: AppColors.white),
+            ],
+          ],
         ),
       ),
     );
@@ -145,11 +383,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
   // COLOR SWATCH
   // ============================================================
 
-  Widget _buildColorSwatch({required String name, required Color color}) {
-    final bool isSelected = _selectedColors.contains(name);
+  Widget _buildColorSwatch({
+    required String name,
+    required Color color,
+    required Set<String> selections,
+  }) {
+    final bool isSelected = selections.contains(name);
 
     return GestureDetector(
-      onTap: () => _toggleColor(name),
+      onTap: () => _toggleSelection(selections, name),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -171,25 +413,76 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 color: color,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: name == 'Ecru'
+                  color: name == 'White' || name == 'Beige'
                       ? AppColors.outlineVariant
                       : Colors.transparent,
                 ),
               ),
             ),
-
             const SizedBox(width: 8),
-
             Text(
               name,
               style: AppTextStyles.labelSmall.copyWith(
                 color: AppColors.primary,
               ),
             ),
-
             if (isSelected) ...[
               const SizedBox(width: 6),
               const Icon(Icons.check, size: 14, color: AppColors.primary),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreferenceHeading(String title, String description) {
+    return Column(
+      children: [
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.secondary,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          description,
+          textAlign: TextAlign.center,
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStylePillForSet(String value, Set<String> selections) {
+    final bool isSelected = selections.contains(value);
+
+    return GestureDetector(
+      onTap: () => _toggleSelection(selections, value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.small),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              value,
+              style: AppTextStyles.labelMedium.copyWith(
+                color: isSelected ? AppColors.white : AppColors.primary,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.check, size: 14, color: AppColors.white),
             ],
           ],
         ),
@@ -209,37 +502,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ==================================================
-                // TOP HEADER
-                // ==================================================
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      'assets/images/wearly_logo.png',
-                      width: 32,
-                      height: 32,
-                      fit: BoxFit.contain,
-                    ),
-
-                    GestureDetector(
-                      onTap: _skipIntro,
-                      child: Text(
-                        'SKIP INTRO',
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.secondary,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
                 const SizedBox(height: 12),
 
                 // ==================================================
@@ -255,7 +521,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 Column(
                   children: [
                     Text(
-                      'YOUR PERSONAL STYLIST',
+                      widget.isEditing
+                          ? 'REFINE YOUR PERSONAL STYLE'
+                          : 'YOUR PERSONAL STYLIST',
                       textAlign: TextAlign.center,
                       style: AppTextStyles.labelMedium.copyWith(
                         color: AppColors.secondary,
@@ -266,9 +534,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     const SizedBox(height: 8),
 
                     Text(
-                      'Curated elegance,\ntailored to your essence.',
+                      widget.isEditing
+                          ? 'Your style,\nyour way.'
+                          : 'Curated elegance,\ntailored to your essence.',
                       textAlign: TextAlign.center,
-                      style: AppTextStyles.headlineMedium.copyWith(height: 1.18),
+                      style: AppTextStyles.headlineMedium.copyWith(
+                        height: 1.18,
+                      ),
                     ),
 
                     const SizedBox(height: 8),
@@ -276,7 +548,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 360),
                       child: Text(
-                        'Bespoke wardrobe curation and intelligent styling recommendations designed exclusively for you.',
+                        widget.isEditing
+                            ? 'Update your preferences to keep your outfit recommendations aligned with your personal taste.'
+                            : 'Bespoke wardrobe curation and intelligent styling recommendations designed exclusively for you.',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: AppColors.onSurfaceVariant,
@@ -291,13 +565,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 // ==================================================
                 // GENDER
                 // ==================================================
-                Text(
+                _buildPreferenceHeading(
                   'SELECT GENDER / IDENTITY',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.secondary,
-                    letterSpacing: 1.5,
-                  ),
+                  'Choose the clothing preferences that best suit you.',
                 ),
 
                 const SizedBox(height: 12),
@@ -312,15 +582,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 const SizedBox(height: 32),
 
                 // ==================================================
-                // STYLE
+                // PREFERRED STYLES
                 // ==================================================
-                Text(
-                  'SELECT YOUR PRIMARY AESTHETIC',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.secondary,
-                    letterSpacing: 1.5,
-                  ),
+                _buildPreferenceHeading(
+                  'YOUR PREFERRED STYLES',
+                  'Select all the styles that reflect your personal taste.',
                 ),
 
                 const SizedBox(height: 12),
@@ -335,15 +601,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 const SizedBox(height: 32),
 
                 // ==================================================
-                // COLORS
+                // PREFERRED COLOURS
                 // ==================================================
-                Text(
-                  'FAVORITE PALETTE / COLORS',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.secondary,
-                    letterSpacing: 1.5,
-                  ),
+                _buildPreferenceHeading(
+                  'FAVOURITE COLOURS',
+                  'Which colours do you enjoy wearing?',
                 ),
 
                 const SizedBox(height: 12),
@@ -356,6 +618,95 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     return _buildColorSwatch(
                       name: item['name'] as String,
                       color: item['color'] as Color,
+                      selections: _selectedColors,
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 32),
+
+                // ==================================================
+                // CLOTHING CATEGORIES
+                // ==================================================
+                _buildPreferenceHeading(
+                  'PREFERRED CLOTHING CATEGORIES',
+                  'Which types of clothing would you like recommendations for?',
+                ),
+
+                const SizedBox(height: 12),
+
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: _categories.map((category) {
+                    return _buildStylePillForSet(category, _selectedCategories);
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 32),
+
+                // ==================================================
+                // OCCASIONS
+                // ==================================================
+                _buildPreferenceHeading(
+                  'YOUR LIFESTYLE & OCCASIONS',
+                  'When do you usually need outfit inspiration?',
+                ),
+
+                const SizedBox(height: 12),
+
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: _occasions.map((occasion) {
+                    return _buildStylePillForSet(occasion, _selectedOccasions);
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 32),
+
+                // ==================================================
+                // DISLIKED STYLES
+                // ==================================================
+                _buildPreferenceHeading(
+                  'STYLES YOU PREFER TO AVOID',
+                  'Optional — select styles that do not match your taste.',
+                ),
+
+                const SizedBox(height: 12),
+
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _styles.map((style) {
+                    return _buildStylePillForSet(style, _dislikedStyles);
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 32),
+
+                // ==================================================
+                // DISLIKED COLOURS
+                // ==================================================
+                _buildPreferenceHeading(
+                  'COLOURS YOU PREFER TO AVOID',
+                  'Optional — select colours you rarely want in your outfits.',
+                ),
+
+                const SizedBox(height: 12),
+
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: _colors.map((item) {
+                    return _buildColorSwatch(
+                      name: item['name'] as String,
+                      color: item['color'] as Color,
+                      selections: _dislikedColors,
                     );
                   }).toList(),
                 ),
@@ -369,7 +720,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _continue,
+                    onPressed: _isSavingPreferences || _isLoadingPreferences
+                        ? null
+                        : _continue,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.white,
@@ -378,22 +731,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         borderRadius: BorderRadius.circular(AppRadius.medium),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'CONTINUE',
-                          style: AppTextStyles.labelMedium.copyWith(
-                            color: AppColors.white,
-                            letterSpacing: 1.8,
+                    child: _isSavingPreferences
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.white,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                widget.isEditing ? 'SAVE CHANGES' : 'CONTINUE',
+                                style: AppTextStyles.labelMedium.copyWith(
+                                  color: AppColors.white,
+                                  letterSpacing: 1.8,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward, size: 18),
+                            ],
                           ),
-                        ),
-
-                        const SizedBox(width: 8),
-
-                        const Icon(Icons.arrow_forward, size: 18),
-                      ],
-                    ),
                   ),
                 ),
               ],
